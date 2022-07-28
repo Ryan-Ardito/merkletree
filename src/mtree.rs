@@ -1,3 +1,13 @@
+/// ```
+/// use merkletree::MerkleTree;
+/// 
+/// let data = vec!["foo", "bar"];
+/// let tree = MerkleTree::new(&data);
+/// let root = tree.root();
+/// let proof = tree.gen_proof("foo").unwrap();
+/// assert!(tree.verify(&proof, "foo", root));
+/// ```
+
 use std::{hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
 
 pub type MerkleHash = [u8; 8];
@@ -47,27 +57,17 @@ fn _hash<T: Hash>(data: T) -> MerkleHash {
 
 /// ensure len of leaves is a power of 2 so that the tree is perfect
 fn pad_layer(layer: &mut Vec<MerkleHash>) {
-    let empty_leaf = _hash(0);
     let mut target_len = 1;
     // find a power of 2 >= length of layer
     while target_len < layer.len() {
         target_len *= 2;
     }
-    // add dummy nodes to reach target
+    // repeat last hash to reach target len
     for _ in 0..(target_len - layer.len()) {
-        layer.push(empty_leaf);
+        layer.push(layer.last().unwrap().clone());
     }
 }
 
-/// ```
-/// use merkletree::MerkleTree;
-/// 
-/// let data = vec!["foo", "bar"];
-/// let tree = MerkleTree::new(&data);
-/// let root = tree.root();
-/// let proof = tree.gen_proof("foo").unwrap();
-/// assert!(tree.verify(&proof, "foo", root));
-/// ```
 pub struct MerkleTree {
     layers: Vec<Vec<MerkleHash>>,
 }
