@@ -57,6 +57,7 @@ fn _hash<T: Hash>(data: T) -> MerkleHash {
 
 /// ensure len of leaves is a power of 2 so that the tree is perfect
 fn pad_layer(layer: &mut Vec<MerkleHash>) {
+    if layer.len() == 0 { return; }
     let mut target_len = 1;
     // find a power of 2 >= length of layer
     while target_len < layer.len() {
@@ -70,6 +71,7 @@ fn pad_layer(layer: &mut Vec<MerkleHash>) {
 }
 
 /// Build merkle trees, get proofs, and verify proofs from hashabe data
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MerkleTree {
     layers: Vec<Vec<MerkleHash>>,
 }
@@ -97,7 +99,7 @@ impl MerkleTree {
         self.insert_hash(hash);
     }
 
-    /// Generates a merkle proof from hashable data.
+    /// Generate a merkle proof from hashable data.
     /// Return Err if hash of data not in tree
     pub fn gen_proof<T: Hash>(&self, element: T) -> Result<MerkleProof, &str> {
         let hash = _hash(element);
@@ -148,7 +150,7 @@ impl MerkleTree {
         for _ in 0..self.layers.len() - 1 {
             let layer = &self.layers[layer_idx];
             let parent_idx = node_idx / 2;
-            // determine if changed node is left or right child
+            // determine if new leaf is left or right child
             let (left, right) = match node_idx % 2 == 0 {
                 true => (layer[node_idx], layer[node_idx + 1]),
                 false => (layer[node_idx - 1], layer[node_idx]),
@@ -183,10 +185,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn root() {
+    fn new_tree_root() {
         let elements = vec!["foo", "bar"];
         let tree = MerkleTree::new(&elements);
         assert_eq!(tree.root(), _hash([_hash("foo"), _hash("bar")].concat()));
+    }
+
+    #[test]
+    fn empty_tree() {
+        let empty_vec: Vec<&str> = vec![];
+        let mut empty_tree = MerkleTree::new(&empty_vec);
+        let prefill_tree = MerkleTree::new(&vec!["foo", "bar"]);
+        empty_tree.insert("foo");
+        assert_ne!(empty_tree, prefill_tree);
+        empty_tree.insert("bar");
+        assert_eq!(empty_tree, prefill_tree);
     }
 
     #[test]
