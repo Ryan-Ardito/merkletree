@@ -12,13 +12,13 @@ use std::{hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
 
 pub type MerkleHash = [u8; 8];
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Side {
     Left,
     Right,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ProofNode {
     hash: MerkleHash,
     side: Side,
@@ -26,7 +26,9 @@ pub struct ProofNode {
 
 pub type MerkleProof = Vec<ProofNode>;
 
+/// Generate a merkle tree from a vec of leaf hashes
 fn build_merkletree(mut leaves: Vec<MerkleHash>) -> Vec<Vec<MerkleHash>> {
+    // ensure leaves.len() is a power of 2 so tree is perfect
     pad_layer(&mut leaves);
     let mut layers = Vec::new();
     layers.push(leaves);
@@ -55,7 +57,7 @@ fn _hash<T: Hash>(data: T) -> MerkleHash {
     hasher.finish().to_be_bytes()
 }
 
-/// ensure len of leaves is a power of 2 so that the tree is perfect
+/// Repeat last hash until leaves.len() is a power of 2
 fn pad_layer(layer: &mut Vec<MerkleHash>) {
     if layer.len() == 0 { return; }
     let mut target_len = 1;
@@ -90,10 +92,12 @@ impl MerkleTree {
         MerkleTree { layers }
     }
 
+    /// return the root hash
     pub fn root(&self) -> MerkleHash {
         self.layers.last().unwrap()[0]
     }
 
+    // add data to the tree
     pub fn insert<T: Hash>(&mut self, data: T) {
         let hash = _hash(data);
         self.insert_hash(hash);
@@ -106,6 +110,7 @@ impl MerkleTree {
         self.proof(hash)
     }
 
+    /// verify that element is a member of the tree
     pub fn verify<T: Hash>(&self, proof: &MerkleProof, element: T, root: MerkleHash) -> bool {
         let hash = _hash(element);
         self.verify_hash(proof, hash, root)
@@ -140,6 +145,7 @@ impl MerkleTree {
                 return
             }
         }
+        // if tree is uniquely perfect, add new element and rebuild tree
         self.layers[0].push(hash);
         *self = MerkleTree::from_leaves(self.layers[0].to_owned());
     }
