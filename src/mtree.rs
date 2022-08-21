@@ -38,13 +38,12 @@ fn build_merkletree(mut leaves: Vec<MerkleHash>) -> Vec<Vec<MerkleHash>> {
         let mut layer: Vec<MerkleHash> = Vec::new();
         // iterate over hashes in pairs to generate parent hash
         for i in (0..layers.last().unwrap().len()).step_by(2) {
-            let node = _hash(
-                [
-                    layers.last().unwrap()[i],
-                    layers.last().unwrap()[i+1]
-                ].concat()
+            let left = layers.last().unwrap()[i];
+            let right = layers.last().unwrap()[i+1];
+            let parent = _hash(
+                [left, right].concat()
             );
-            layer.push(node);
+            layer.push(parent);
         }
         layers.push(layer);
     }
