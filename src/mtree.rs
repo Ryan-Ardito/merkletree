@@ -8,7 +8,8 @@
 /// assert!(tree.verify(&proof, "foo", root));
 /// ```
 
-use std::{hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 
 pub type MerkleHash = [u8; 8];
 
