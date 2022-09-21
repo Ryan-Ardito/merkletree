@@ -8,10 +8,9 @@
 /// assert!(tree.verify(&proof, "foo", root));
 /// ```
 
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
+use tiny_keccak::{Hasher, Keccak};
 
-pub type MerkleHash = [u8; 8];
+pub type MerkleHash = [u8; 32];
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Side {
@@ -51,10 +50,12 @@ fn build_merkletree(mut leaves: Vec<MerkleHash>) -> Vec<Vec<MerkleHash>> {
     layers
 }
 
-fn _hash<T: Hash>(data: T) -> MerkleHash {
-    let mut hasher = DefaultHasher::new();
-    data.hash(&mut hasher);
-    hasher.finish().to_be_bytes()
+fn _hash<T: AsRef<[u8]>>(data: T) -> MerkleHash {
+    let mut output = [0u8; 32];
+    let mut hasher = Keccak::v256();
+    hasher.update(data.as_ref());
+    hasher.finalize(&mut output);
+    output
 }
 
 /// Repeat last hash until leaves.len() is a power of 2
@@ -79,7 +80,7 @@ pub struct MerkleTree {
 }
 
 impl MerkleTree {
-    pub fn new<T: Hash>(elements: &Vec<T>) -> Self {
+    pub fn new<T: AsRef<[u8]>>(elements: &Vec<T>) -> Self {
         let leaves: Vec<MerkleHash> = elements
             .into_iter()
             .map(|e| _hash(e))
@@ -98,20 +99,20 @@ impl MerkleTree {
     }
 
     // add data to the tree
-    pub fn insert<T: Hash>(&mut self, data: T) {
+    pub fn insert<T: AsRef<[u8]>>(&mut self, data: T) {
         let hash = _hash(data);
         self.insert_hash(hash);
     }
 
     /// Generate a merkle proof from hashable data.
     /// Return Err if hash of data not in tree
-    pub fn gen_proof<T: Hash>(&self, element: T) -> Result<MerkleProof, &str> {
+    pub fn gen_proof<T: AsRef<[u8]>>(&self, element: T) -> Result<MerkleProof, &str> {
         let hash = _hash(element);
         self.proof(hash)
     }
 
     /// verify that element is a member of the tree
-    pub fn verify<T: Hash>(&self, proof: &MerkleProof, element: T, root: MerkleHash) -> bool {
+    pub fn verify<T: AsRef<[u8]>>(&self, proof: &MerkleProof, element: T, root: MerkleHash) -> bool {
         let hash = _hash(element);
         self.verify_hash(proof, hash, root)
     }
