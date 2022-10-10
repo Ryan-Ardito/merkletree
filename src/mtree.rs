@@ -119,17 +119,18 @@ impl MerkleTree {
 
     fn proof(&self, hash: MerkleHash) -> Result<MerkleProof, &str> {
         // find index of leaf
-        let mut idx = match self.layers[0].iter().position(|&e| e == hash) {
-            Some(h) => h,
-            None => { return Err("element not in tree") },
-        };
+        let mut idx = self.layers[0]
+            .iter()
+            .position(|&e| e == hash)
+            .ok_or("element not in tree")?;
         let mut proof = Vec::new();
         for i in 0..(self.layers.len() - 1) {
             // determine if sibling node is left or right
-            let node = match idx % 2 == 0 {
-                true => ProofNode { hash: self.layers[i][idx + 1], side: Side::Right },
-                false => ProofNode { hash: self.layers[i][idx - 1], side: Side::Left },
+            let (hash, side) = match idx % 2 == 0 {
+                true => (self.layers[i][idx + 1], Side::Right),
+                false => (self.layers[i][idx - 1], Side::Left),
             };
+            let node = ProofNode { hash, side };
             proof.push(node);
             idx /= 2;
         }
@@ -183,7 +184,7 @@ impl MerkleTree {
             };
             running_hash = _hash([left, right].concat());
         }
-        running_hash == root
+        running_hash == tree_root
     }
 }
 
