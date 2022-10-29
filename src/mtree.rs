@@ -1,6 +1,7 @@
 //! A Merkle Tree hashed datastructure that allows the contruction of proofs,
 //! which allow proving membership in the tree to a party that only knows the root hash
-use tiny_keccak::{Hasher, Keccak};
+// use tiny_keccak::{Hasher, Keccak};
+use crate::hashing::{MerkleHasher, DefaultMerkleHasher};
 
 /// Build merkle trees, get proofs, and verify proofs from hashabe data
 /// ```
@@ -13,14 +14,14 @@ use tiny_keccak::{Hasher, Keccak};
 /// assert!(tree.verify(&proof, "foo", root));
 /// ```
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct MerkleTree {
-    layers: Vec<Vec<MerkleHash>>,
+pub struct MerkleTree<H: MerkleHasher = DefaultMerkleHasher> {
+    layers: Vec<Vec<H::MerkleHash>>,
 }
 
-/// Internal hash is an array of bytes
-pub type MerkleHash = [u8; 32];
+// /// Internal hash is an array of bytes
+// pub type MerkleHash = [u8; 32];
 /// Chain of siblings up to the root
-pub type MerkleProof = Vec<ProofNode>;
+pub type MerkleProof<H> = Vec<ProofNode<H>>;
 
 /// Left or Right child of a parent
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -33,23 +34,34 @@ pub enum Side {
 
 /// element hash and side of node
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct ProofNode {
-    hash: MerkleHash,
+pub struct ProofNode<H: MerkleHasher> {
+    hash: H::MerkleHash,
     side: Side,
 }
 
 impl MerkleTree {
     /// Construct a MerkleTree from a sequence of elements
     pub fn new<T: AsRef<[u8]>>(elements: &Vec<T>) -> Self {
-        let leaves: Vec<MerkleHash> = elements
+        let leaves: Vec<<DefaultMerkleHasher as MerkleHasher>::MerkleHash> = elements
             .iter()
-            .map(|elem| Self::hash(elem))
+            .map(|elem| DefaultMerkleHasher::hash(elem))
+            .collect();
+        MerkleTree::from_leaves(leaves)
+    }
+}
+
+impl<H: MerkleHasher> MerkleTree<H> {
+    /// Use a custom hasher
+    pub fn new_with_hasher<T: AsRef<[u8]>>(elements: &Vec<T>) -> Self {
+        let leaves: Vec<H::MerkleHash> = elements
+            .iter()
+            .map(|elem| H::hash(elem))
             .collect();
         MerkleTree::from_leaves(leaves)
     }
 
     /// Generate a merkle tree from a vec of leaf hashes
-    fn build_merkletree(mut leaves: Vec<MerkleHash>) -> Vec<Vec<MerkleHash>> {
+    fn build_layers(mut leaves: Vec<H::MerkleHash>) -> Vec<Vec<H::MerkleHash>> {
         // ensure leaves.len() is a power of 2 so tree is perfect
         Self::pad_layer(&mut leaves);
         let mut layers = Vec::new();
@@ -57,13 +69,13 @@ impl MerkleTree {
 
         // build layers up to root
         while layers.last().unwrap().len() > 1 {
-            let mut layer: Vec<MerkleHash> = Vec::new();
+            let mut layer: Vec<H::MerkleHash> = Vec::new();
             // iterate over hashes in pairs to generate parent hash
             for i in (0..layers.last().unwrap().len()).step_by(2) {
                 let left = layers.last().unwrap()[i];
                 let right = layers.last().unwrap()[i+1];
-                let parent = Self::hash(
-                    [left, right].concat()
+                let parent = H::hash(
+                    [left.as_ref(), right.as_ref()].concat()
                 );
                 layer.push(parent);
             }
@@ -72,16 +84,16 @@ impl MerkleTree {
         layers
     }
 
-    fn hash<T: AsRef<[u8]>>(data: T) -> MerkleHash {
-        let mut output = [0u8; 32];
-        let mut hasher = Keccak::v256();
-        hasher.update(data.as_ref());
-        hasher.finalize(&mut output);
-        output
-    }
+    // fn hash<T: AsRef<[u8]>>(data: T) -> MerkleHash {
+    //     let mut output = [0u8; 32];
+    //     let mut hasher = Keccak::v256();
+    //     hasher.update(data.as_ref());
+    //     hasher.finalize(&mut output);
+    //     output
+    // }
 
     /// Repeat last hash until leaves.len() is a power of 2
-    fn pad_layer(layer: &mut Vec<MerkleHash>) {
+    fn pad_layer(layer: &mut Vec<H::MerkleHash>) {
         if layer.len() == 0 { return; }
         let mut target_len = 1;
         // find a power of 2 >= length of layer
@@ -98,36 +110,34 @@ impl MerkleTree {
 
     /// add data to the tree
     pub fn insert<T: AsRef<[u8]>>(&mut self, data: T) {
-        let hash = Self::hash(data);
+        let hash = H::hash(data);
         self.insert_hash(hash);
     }
 
     /// Generate a merkle proof from hashable data.
     /// Return Err if hash of data not in tree
-    pub fn gen_proof<T: AsRef<[u8]>>(&self, element: T) -> Result<MerkleProof, &str> {
-        let hash = Self::hash(element);
+    pub fn gen_proof<T: AsRef<[u8]>>(&self, element: T) -> Result<MerkleProof<H>, &str> {
+        let hash = H::hash(element);
         self.proof(hash)
     }
 
     /// verify that element is a member of the tree
-    pub fn verify<T: AsRef<[u8]>>(&self, proof: &MerkleProof, element: T, root: MerkleHash) -> bool {
-        let hash = Self::hash(element);
+    pub fn verify<T: AsRef<[u8]>>(&self, proof: &MerkleProof<H>, element: T, root: H::MerkleHash) -> bool {
+        let hash = H::hash(element);
         self.verify_hash(proof, hash, root)
     }
-}
 
-impl MerkleTree {
-    fn from_leaves(leaves: Vec<MerkleHash>) -> Self {
-        let layers = Self::build_merkletree(leaves);
+    fn from_leaves(leaves: Vec<H::MerkleHash>) -> Self {
+        let layers = Self::build_layers(leaves);
         MerkleTree { layers }
     }
 
     /// return the root hash
-    pub fn root(&self) -> Option<MerkleHash> {
+    pub fn root(&self) -> Option<H::MerkleHash> {
         Some(self.layers.last()?[0])
     }
 
-    fn proof(&self, hash: MerkleHash) -> Result<MerkleProof, &str> {
+    fn proof(&self, hash: H::MerkleHash) -> Result<MerkleProof<H>, &str> {
         // find index of leaf
         let mut idx = self.layers[0]
             .iter()
@@ -148,7 +158,7 @@ impl MerkleTree {
         Ok(proof)
     }
 
-    fn insert_hash(&mut self, hash: MerkleHash) {
+    fn insert_hash(&mut self, hash: H::MerkleHash) {
         let leaves = &mut self.layers[0];
         for i in 1..leaves.len() {
             if leaves[i-1] == leaves[i] {
@@ -174,13 +184,13 @@ impl MerkleTree {
                 false => (layer[node_idx - 1], layer[node_idx]),
             };
             // rehash parent node
-            self.layers[layer_idx + 1][parent_idx] = Self::hash([left, right].concat());
+            self.layers[layer_idx + 1][parent_idx] = H::hash([left.as_ref(), right.as_ref()].concat());
             node_idx = parent_idx;
             layer_idx += 1;
         }
     }
 
-    fn verify_hash(&self, proof: &MerkleProof, hash: MerkleHash, root: MerkleHash) -> bool {
+    fn verify_hash(&self, proof: &MerkleProof<H>, hash: H::MerkleHash, root: H::MerkleHash) -> bool {
         // verify provided root matches tree root
         let tree_root = self.root();
         if Some(root) != tree_root || !self.layers[0].contains(&hash) { return false }
@@ -192,7 +202,7 @@ impl MerkleTree {
                 Side::Left => (node.hash, running_hash),
                 Side::Right => (running_hash, node.hash),
             };
-            running_hash = Self::hash([left, right].concat());
+            running_hash = H::hash([left.as_ref(), right.as_ref()].concat());
         }
         Some(running_hash) == tree_root
     }
@@ -206,7 +216,24 @@ mod tests {
     fn new_tree_root() {
         let elements = vec!["foo", "bar"];
         let tree = MerkleTree::new(&elements);
-        assert_eq!(tree.root(), Some(MerkleTree::hash([MerkleTree::hash("foo"), MerkleTree::hash("bar")].concat())));
+        assert_eq!(tree.root(), Some(DefaultMerkleHasher::hash([DefaultMerkleHasher::hash("foo"), DefaultMerkleHasher::hash("bar")].concat())));
+    }
+
+    #[test]
+    fn generic_hasher() {
+        /// should break functionality
+        #[derive(Clone, Copy)]
+        struct DumbHasher;
+        impl MerkleHasher for DumbHasher {
+            type MerkleHash = [u8; 2];
+            fn hash<T: AsRef<[u8]>>(_data: T) -> Self::MerkleHash { [0, 0] }
+        }
+        let elements = vec!["foo", "bar"];
+        let tree = MerkleTree::<DumbHasher>::new_with_hasher(&elements);
+        let proof = tree.gen_proof("baz").unwrap();
+        let element = "quoz";
+        let root = [0, 0];
+        assert!(tree.verify(&proof, element, root));
     }
 
     #[test]
@@ -241,7 +268,7 @@ mod tests {
         let tree = MerkleTree::new(&elements);
         let proof = tree.gen_proof("foo").unwrap();
         assert_eq!(proof.len(), 1);
-        assert_eq!(proof[0].hash, MerkleTree::hash("bar"));
+        assert_eq!(proof[0].hash, DefaultMerkleHasher::hash("bar"));
         assert!(tree.gen_proof("baz").is_err());
     }
 
