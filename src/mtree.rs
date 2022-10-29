@@ -1,6 +1,6 @@
 //! A Merkle Tree hashed datastructure that allows the contruction of proofs,
 //! which allow proving membership in the tree to a party that only knows the root hash
-// use tiny_keccak::{Hasher, Keccak};
+#![allow(type_alias_bounds)]
 use crate::hashing::{MerkleHasher, DefaultMerkleHasher};
 
 /// Build merkle trees, get proofs, and verify proofs from hashabe data
@@ -18,10 +18,10 @@ pub struct MerkleTree<H: MerkleHasher = DefaultMerkleHasher> {
     layers: Vec<Vec<H::MerkleHash>>,
 }
 
-// /// Internal hash is an array of bytes
-// pub type MerkleHash = [u8; 32];
 /// Chain of siblings up to the root
 pub type MerkleProof<H> = Vec<ProofNode<H>>;
+/// Layer in tree
+type Layer<H: MerkleHasher> = Vec<H::MerkleHash>;
 
 /// Left or Right child of a parent
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -53,60 +53,17 @@ impl MerkleTree {
 impl<H: MerkleHasher> MerkleTree<H> {
     /// Use a custom hasher
     pub fn new_with_hasher<T: AsRef<[u8]>>(elements: &Vec<T>) -> Self {
-        let leaves: Vec<H::MerkleHash> = elements
+        let leaves: Layer<H> = elements
             .iter()
             .map(|elem| H::hash(elem))
             .collect();
         MerkleTree::from_leaves(leaves)
     }
 
-    /// Generate a merkle tree from a vec of leaf hashes
-    fn build_layers(mut leaves: Vec<H::MerkleHash>) -> Vec<Vec<H::MerkleHash>> {
-        // ensure leaves.len() is a power of 2 so tree is perfect
-        Self::pad_layer(&mut leaves);
-        let mut layers = Vec::new();
-        layers.push(leaves);
-
-        // build layers up to root
-        while layers.last().unwrap().len() > 1 {
-            let mut layer: Vec<H::MerkleHash> = Vec::new();
-            // iterate over hashes in pairs to generate parent hash
-            for i in (0..layers.last().unwrap().len()).step_by(2) {
-                let left = layers.last().unwrap()[i];
-                let right = layers.last().unwrap()[i+1];
-                let parent = H::hash(
-                    [left.as_ref(), right.as_ref()].concat()
-                );
-                layer.push(parent);
-            }
-            layers.push(layer);
-        }
-        layers
+    /// return the root hash
+    pub fn root(&self) -> Option<H::MerkleHash> {
+        Some(self.layers.last()?[0])
     }
-
-    // fn hash<T: AsRef<[u8]>>(data: T) -> MerkleHash {
-    //     let mut output = [0u8; 32];
-    //     let mut hasher = Keccak::v256();
-    //     hasher.update(data.as_ref());
-    //     hasher.finalize(&mut output);
-    //     output
-    // }
-
-    /// Repeat last hash until leaves.len() is a power of 2
-    fn pad_layer(layer: &mut Vec<H::MerkleHash>) {
-        if layer.len() == 0 { return; }
-        let mut target_len = 1;
-        // find a power of 2 >= length of layer
-        while target_len < layer.len() {
-            target_len *= 2;
-        }
-        // repeat last hash to reach target len
-        for _ in 0..(target_len - layer.len()) {
-            layer.push(layer.last().unwrap().clone());
-        }
-        assert!(layer.len() & (layer.len() - 1) == 0);
-    }
-
 
     /// add data to the tree
     pub fn insert<T: AsRef<[u8]>>(&mut self, data: T) {
@@ -127,14 +84,48 @@ impl<H: MerkleHasher> MerkleTree<H> {
         self.verify_hash(proof, hash, root)
     }
 
-    fn from_leaves(leaves: Vec<H::MerkleHash>) -> Self {
-        let layers = Self::build_layers(leaves);
-        MerkleTree { layers }
+    /// Generate a merkle tree from a vec of leaf hashes
+    fn build_layers(mut leaves: Layer<H>) -> Vec<Layer<H>> {
+        // ensure leaves.len() is a power of 2 so tree is perfect
+        Self::pad_layer(&mut leaves);
+        let mut layers = Vec::new();
+        layers.push(leaves);
+
+        // build layers up to root
+        while layers.last().unwrap().len() > 1 {
+            let mut layer: Layer<H> = Vec::new();
+            // iterate over hashes in pairs to generate parent hash
+            for i in (0..layers.last().unwrap().len()).step_by(2) {
+                let left = layers.last().unwrap()[i];
+                let right = layers.last().unwrap()[i+1];
+                let parent = H::hash(
+                    [left.as_ref(), right.as_ref()].concat()
+                );
+                layer.push(parent);
+            }
+            layers.push(layer);
+        }
+        layers
     }
 
-    /// return the root hash
-    pub fn root(&self) -> Option<H::MerkleHash> {
-        Some(self.layers.last()?[0])
+    /// Repeat last hash until leaves.len() is a power of 2
+    fn pad_layer(layer: &mut Layer<H>) {
+        if layer.len() == 0 { return; }
+        let mut target_len = 1;
+        // find a power of 2 >= length of layer
+        while target_len < layer.len() {
+            target_len *= 2;
+        }
+        // repeat last hash to reach target len
+        for _ in 0..(target_len - layer.len()) {
+            layer.push(layer.last().unwrap().clone());
+        }
+        assert!(layer.len() & (layer.len() - 1) == 0);
+    }
+
+    fn from_leaves(leaves: Layer<H>) -> Self {
+        let layers = Self::build_layers(leaves);
+        MerkleTree { layers }
     }
 
     fn proof(&self, hash: H::MerkleHash) -> Result<MerkleProof<H>, &str> {
