@@ -63,6 +63,15 @@ impl<H: MerkleHasher> MerkleTree<H> {
         Some(self.layers.last()?[0])
     }
 
+    /// Return true if data is in the tree
+    pub fn contains<T: AsRef<[u8]>>(&self, data: &T) -> bool {
+        let hash = H::hash(data);
+        match self.layers.first() {
+            None => false,
+            Some(layer) => layer.iter().find(|elem| &hash == *elem).is_some(),
+        }
+    }
+
     /// Depth is the distance of the furthest node from the root
     ///          0
     ///        /   \
@@ -263,6 +272,16 @@ mod tests {
         assert_eq!(tree.depth(), Some(1));
         tree.insert(&"baz");
         assert_eq!(tree.depth(), Some(2));
+    }
+
+    #[test]
+    fn test_contains() {
+        let elements = vec!["foo", "bar"];
+        let mut tree = MerkleTree::new(&elements);
+        assert!(tree.contains(&"foo"));
+        assert!(!tree.contains(&"baz"));
+        tree.insert(&"baz");
+        assert!(tree.contains(&"baz"));
     }
 
     #[test]
