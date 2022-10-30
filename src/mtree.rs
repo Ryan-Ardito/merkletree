@@ -6,10 +6,10 @@
 use crate::hashing::{Sha256, MerkleHasher};
 use crate::proof::{MerkleProof, ProofNode, Side};
 
-/******************************************************************************
+/***********************************TODO**************************************
 
 API design decisions:
-  - Should gen_proof return Result or Option?
+  - Should gen_proof return Result or Option? (Currently Result)
   - Should the new() constructor create an empty tree,
     or always from a vec of elems?
   - More getter functions?
@@ -20,7 +20,11 @@ Implementation improvements:
   - More efficient storage
   - Better runtime speed
 
-******************************************************************************/
+ *****************************************************************************/
+
+ fn concat_bytes<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
+    [left.as_ref(), right.as_ref()].concat()
+ }
 
 /// Build merkle trees, get proofs, and verify proofs from hashabe data
 ///
@@ -69,7 +73,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
         let hash = H::hash(data);
         match self.layers.first() {
             None => false,
-            Some(layer) => layer.iter().find(|elem| &hash == *elem).is_some(),
+            Some(layer) => layer.iter().find(|elem| hash == **elem).is_some(),
         }
     }
 
@@ -93,6 +97,17 @@ impl<H: MerkleHasher> MerkleTree<H> {
     }
 
     /// Add data to the tree
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use merkletree::MerkleTree;
+    /// 
+    /// let elements = vec!["foo", "bar"];
+    /// let mut tree = MerkleTree::new(&elements);
+    /// tree.insert(&"baz");
+    /// tree.insert(&"quox");
+    /// ```
     pub fn insert<T: AsRef<[u8]>>(&mut self, data: &T) {
         let hash = H::hash(data);
         self.insert_hash(hash);
@@ -130,7 +145,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
             for i in (0..layers.last().unwrap().len()).step_by(2) {
                 let left = layers.last().unwrap()[i];
                 let right = layers.last().unwrap()[i + 1];
-                let parent = H::hash(&[left.as_ref(), right.as_ref()].concat());
+                let parent = H::hash(&concat_bytes(left, right));
                 layer.push(parent);
             }
             layers.push(layer);
@@ -209,7 +224,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
             // rehash parent node
             let parent_idx = node_idx / 2;
             self.layers[layer_idx + 1][parent_idx] =
-                H::hash(&[left.as_ref(), right.as_ref()].concat());
+                H::hash(&concat_bytes(left, right));
             node_idx = parent_idx;
         }
     }
@@ -233,7 +248,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
                 Side::Left => (node.hash, running_hash),
                 Side::Right => (running_hash, node.hash),
             };
-            running_hash = H::hash(&[left.as_ref(), right.as_ref()].concat());
+            running_hash = H::hash(&concat_bytes(left, right));
         }
         Some(running_hash) == tree_root
     }

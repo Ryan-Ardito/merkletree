@@ -1,4 +1,4 @@
-//! Hashing for merkletree
+//! Hashing data types and algorithms for merkletree
 
 use std::hash::Hasher as RustHasher;
 
@@ -33,7 +33,7 @@ pub trait MerkleHasher {
 }
 
 /*****************************************************************************
- *                              ALGORITHMS                                   *
+ *                                ALGORITHMS                                 *
  *****************************************************************************/
 
 /// Default Keccack256 hasher for merkletree
