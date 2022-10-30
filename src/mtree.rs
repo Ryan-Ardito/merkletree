@@ -110,7 +110,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
         root: H::MerkleHash,
     ) -> bool {
         let hash = H::hash(element);
-        self.verify_hash(proof, hash, root)
+        self.verify_proof(proof, hash, root)
     }
 
     /// Generate a merkle tree from a vec of leaf hashes
@@ -147,9 +147,10 @@ impl<H: MerkleHasher> MerkleTree<H> {
         }
         // repeat last hash to reach target len
         for _ in 0..(target_len - layer.len()) {
+            // unwrap can be used here because we checked if layer is empty
             layer.push(*layer.last().unwrap());
         }
-        assert!(layer.len() & (layer.len() - 1) == 0);
+        debug_assert!(layer.len() & (layer.len() - 1) == 0);
     }
 
     fn from_leaves(leaves: Layer<H>) -> Self {
@@ -172,6 +173,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
             };
             let node = ProofNode { hash, side };
             proof.push(node);
+            // integer halving gives the parent's index
             idx /= 2;
         }
         Ok(proof)
@@ -194,24 +196,22 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
     fn recalculate_branch(&mut self, leaf_idx: usize) {
         let mut node_idx = leaf_idx;
-        let mut layer_idx = 0;
-        for _ in 0..self.layers.len() - 1 {
+        for layer_idx in 0..self.layers.len() - 1 {
             let layer = &self.layers[layer_idx];
-            let parent_idx = node_idx / 2;
             // determine if new leaf is left or right child
             let (left, right) = match node_idx % 2 == 0 {
                 true => (layer[node_idx], layer[node_idx + 1]),
                 false => (layer[node_idx - 1], layer[node_idx]),
             };
             // rehash parent node
+            let parent_idx = node_idx / 2;
             self.layers[layer_idx + 1][parent_idx] =
                 H::hash(&[left.as_ref(), right.as_ref()].concat());
             node_idx = parent_idx;
-            layer_idx += 1;
         }
     }
 
-    fn verify_hash(
+    fn verify_proof(
         &self,
         proof: &MerkleProof<H>,
         hash: H::MerkleHash,
