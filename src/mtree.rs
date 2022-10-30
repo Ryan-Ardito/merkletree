@@ -21,6 +21,7 @@ Implementation improvements:
 
  *****************************************************************************/
 
+/// Concatenate hashes prepended with the internal node prefix
 fn concat_bytes<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
     let (left, right) = (left.as_ref(), right.as_ref());
     match left < right {
@@ -78,7 +79,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
         let hash = H::hash(data);
         match self.layers.first() {
             None => false,
-            Some(layer) => layer.iter().find(|elem| hash == **elem).is_some(),
+            Some(layer) => layer.iter().any(|elem| hash == *elem),
         }
     }
 
@@ -244,8 +245,8 @@ impl<H: MerkleHasher> MerkleTree<H> {
         let mut running_hash = hash;
         for hash in proof {
             let (left, right) = match hash.as_ref() < running_hash.as_ref() {
-                true => (hash.clone(), running_hash),
-                false => (running_hash, hash.clone()),
+                true => (*hash, running_hash),
+                false => (running_hash, *hash),
             };
             running_hash = H::hash(&concat_bytes(left, right));
         }

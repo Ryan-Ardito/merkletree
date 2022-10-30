@@ -37,7 +37,7 @@ pub trait MerkleHasher {
  *****************************************************************************/
 
 /// Default Keccack256 hasher for merkletree
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Sha256;
 
 impl MerkleHasher for Sha256 {
@@ -54,7 +54,7 @@ impl MerkleHasher for Sha256 {
 
 /// Rust DefaultHasher used in HashMap and HashSet
 /// 64bit, not cryptographically secure, but much faster than SHA3
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SipHasher;
 
 impl MerkleHasher for SipHasher {
