@@ -16,6 +16,7 @@ API design decisions:
 
 Implementation improvements:
   - Root hash and proof should match other implementations for given data.
+  - Second preimage attack resistance
   - More efficient storage
   - Better runtime speed
 
@@ -73,6 +74,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
     }
 
     /// Depth is the distance of the furthest node from the root
+    /// ```text
     ///          0
     ///        /   \
     ///       1     1
@@ -80,6 +82,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
     ///     2   2 2   2
     ///    / \
     ///   3   3
+    /// ```
     /// 
     /// Returns None if tree is empty
     pub fn depth(&self) -> Option<usize> {
@@ -189,7 +192,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
                 return;
             }
         }
-        // if tree is uniquely perfect, add new element and rebuild tree
+        // if tree is full, add new element and rebuild tree
         self.layers[0].push(hash);
         *self = MerkleTree::from_leaves(self.layers[0].to_owned());
     }

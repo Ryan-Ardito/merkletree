@@ -4,6 +4,7 @@
 #![warn(missing_docs, rust_2018_idioms, missing_debug_implementations)]
 
 pub mod hashing;
+pub use hashing::MerkleHasher;
 pub mod mtree;
 pub use mtree::MerkleTree;
 pub mod proof;

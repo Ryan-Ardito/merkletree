@@ -3,7 +3,26 @@
 use tiny_keccak::{Hasher, Keccak};
 
 /// Allows the use of a custom hashing algorithm
-pub trait MerkleHasher: Clone {
+/// 
+/// # Examples
+/// ```
+/// use merkletree::{MerkleTree, MerkleHasher};
+/// 
+/// struct MyHasher;
+/// 
+/// impl MerkleHasher for MyHasher {
+///     type MerkleHash = [u8; 32];
+/// 
+///     fn hash<T: AsRef<[u8]>>(data: &T) -> Self::MerkleHash {
+///         // do hashing and return
+///         return [0; 32]
+///     }
+/// }
+/// 
+/// let elements = vec!["foo", "bar"];
+/// let tree = MerkleTree::<MyHasher>::new_with_hasher(&elements);
+/// ```
+pub trait MerkleHasher {
     /// type produced by hasher
     type MerkleHash: PartialEq + Clone + Copy + AsRef<[u8]>;
 
@@ -12,7 +31,7 @@ pub trait MerkleHasher: Clone {
 }
 
 /// Default hasher for merkletree
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct DefaultMerkleHasher;
 
 impl MerkleHasher for DefaultMerkleHasher {
