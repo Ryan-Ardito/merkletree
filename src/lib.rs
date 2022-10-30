@@ -7,4 +7,3 @@ pub mod hashing;
 pub use hashing::MerkleHasher;
 pub mod mtree;
 pub use mtree::MerkleTree;
-pub mod proof;

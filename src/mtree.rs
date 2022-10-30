@@ -3,8 +3,7 @@
 
 #![allow(type_alias_bounds)]
 
-use crate::hashing::{Sha256, MerkleHasher};
-use crate::proof::{MerkleProof, ProofNode, Side};
+use crate::hashing::{MerkleHasher, Sha256};
 
 /***********************************TODO**************************************
 
@@ -22,9 +21,13 @@ Implementation improvements:
 
  *****************************************************************************/
 
- fn concat_bytes<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
-    [left.as_ref(), right.as_ref()].concat()
- }
+fn concat_bytes<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
+    let (left, right) = (left.as_ref(), right.as_ref());
+    match left < right {
+        true => [left, right].concat(),
+        false => [right, left].concat(),
+    }
+}
 
 /// Build merkle trees, get proofs, and verify proofs from hashabe data
 ///
@@ -46,6 +49,8 @@ pub struct MerkleTree<H: MerkleHasher = Sha256> {
 
 /// Layer in tree
 type Layer<H: MerkleHasher> = Vec<H::Hash>;
+/// Partial tree in merkle proof
+type MerkleProof<H: MerkleHasher> = Vec<H::Hash>;
 
 impl MerkleTree {
     /// Construct a MerkleTree from a sequence of elements
@@ -87,7 +92,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
     ///    / \
     ///   3   3
     /// ```
-    /// 
+    ///
     /// Returns None if tree is empty
     pub fn depth(&self) -> Option<usize> {
         match self.layers.len() {
@@ -97,12 +102,12 @@ impl<H: MerkleHasher> MerkleTree<H> {
     }
 
     /// Add data to the tree
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use merkletree::MerkleTree;
-    /// 
+    ///
     /// let elements = vec!["foo", "bar"];
     /// let mut tree = MerkleTree::new(&elements);
     /// tree.insert(&"baz");
@@ -185,11 +190,11 @@ impl<H: MerkleHasher> MerkleTree<H> {
         let mut proof = Vec::new();
         for i in 0..(self.layers.len() - 1) {
             // determine if sibling node is left or right
-            let (hash, side) = match idx % 2 == 0 {
-                true => (self.layers[i][idx + 1], Side::Right),
-                false => (self.layers[i][idx - 1], Side::Left),
+            let hash = match idx % 2 == 0 {
+                true => self.layers[i][idx + 1],
+                false => self.layers[i][idx - 1],
             };
-            let node = ProofNode { hash, side };
+            let node = hash;
             proof.push(node);
             // integer halving gives the parent's index
             idx /= 2;
@@ -223,18 +228,12 @@ impl<H: MerkleHasher> MerkleTree<H> {
             };
             // rehash parent node
             let parent_idx = node_idx / 2;
-            self.layers[layer_idx + 1][parent_idx] =
-                H::hash(&concat_bytes(left, right));
+            self.layers[layer_idx + 1][parent_idx] = H::hash(&concat_bytes(left, right));
             node_idx = parent_idx;
         }
     }
 
-    fn verify_proof(
-        &self,
-        proof: &MerkleProof<H>,
-        hash: H::Hash,
-        root: H::Hash,
-    ) -> bool {
+    fn verify_proof(&self, proof: &MerkleProof<H>, hash: H::Hash, root: H::Hash) -> bool {
         // verify provided root matches tree root
         let tree_root = self.root();
         if Some(root) != tree_root || !self.layers[0].contains(&hash) {
@@ -243,10 +242,10 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
         // hash proof nodes up to root
         let mut running_hash = hash;
-        for node in proof {
-            let (left, right) = match node.side {
-                Side::Left => (node.hash, running_hash),
-                Side::Right => (running_hash, node.hash),
+        for hash in proof {
+            let (left, right) = match hash.as_ref() < running_hash.as_ref() {
+                true => (hash.clone(), running_hash),
+                false => (running_hash, hash.clone()),
             };
             running_hash = H::hash(&concat_bytes(left, right));
         }
@@ -274,11 +273,7 @@ mod tests {
         assert_eq!(
             tree.root(),
             Some(Sha256::hash(
-                &[
-                    Sha256::hash(&"foo"),
-                    Sha256::hash(&"bar")
-                ]
-                .concat()
+                &[Sha256::hash(&"foo"), Sha256::hash(&"bar")].concat()
             ))
         );
     }
@@ -344,7 +339,7 @@ mod tests {
         let tree = MerkleTree::new(&elements);
         let proof = tree.gen_proof(&"foo").unwrap();
         assert_eq!(proof.len(), 1);
-        assert_eq!(proof[0].hash, Sha256::hash(&"bar"));
+        assert_eq!(proof[0], Sha256::hash(&"bar"));
         assert!(tree.gen_proof(&"baz").is_err());
     }
 

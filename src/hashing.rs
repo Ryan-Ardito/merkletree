@@ -5,22 +5,22 @@ use std::hash::Hasher as RustHasher;
 use tiny_keccak::{Hasher as TinyHasher, Keccak};
 
 /// Allows the use of a custom hashing algorithm
-/// 
+///
 /// # Examples
 /// ```
 /// use merkletree::{MerkleTree, MerkleHasher};
-/// 
+///
 /// struct MyHasher;
-/// 
+///
 /// impl MerkleHasher for MyHasher {
 ///     type Hash = [u8; 32];
-/// 
+///
 ///     fn hash<T: AsRef<[u8]>>(data: &T) -> Self::Hash {
 ///         // do hashing and return
 ///         return [0; 32]
 ///     }
 /// }
-/// 
+///
 /// let elements = vec!["foo", "bar"];
 /// let tree = MerkleTree::<MyHasher>::new_with_hasher(&elements);
 /// ```
