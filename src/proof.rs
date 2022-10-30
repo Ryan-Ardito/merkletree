@@ -1,6 +1,6 @@
 //! Data types for merkle proofs
 
-use crate::hashing::{MerkleHasher};
+use crate::hashing::MerkleHasher;
 
 /// Chain of siblings up to the root
 pub type MerkleProof<H> = Vec<ProofNode<H>>;
