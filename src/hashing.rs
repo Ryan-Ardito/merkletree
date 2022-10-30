@@ -1,6 +1,8 @@
 //! Hashing for merkletree
 
-use tiny_keccak::{Hasher, Keccak};
+use std::hash::Hasher as RustHasher;
+
+use tiny_keccak::{Hasher as TinyHasher, Keccak};
 
 /// Allows the use of a custom hashing algorithm
 /// 
@@ -30,7 +32,11 @@ pub trait MerkleHasher {
     fn hash<T: AsRef<[u8]>>(data: &T) -> Self::Hash;
 }
 
-/// Default hasher for merkletree
+/*****************************************************************************
+ *                              ALGORITHMS                                   *
+ *****************************************************************************/
+
+/// Default Keccack256 hasher for merkletree
 #[derive(Debug, PartialEq)]
 pub struct Sha256;
 
@@ -43,5 +49,20 @@ impl MerkleHasher for Sha256 {
         hasher.update(data.as_ref());
         hasher.finalize(&mut output);
         output
+    }
+}
+
+/// Rust DefaultHasher used in HashMap and HashSet
+/// 64bit, not cryptographically secure, but much faster than SHA3
+#[derive(Debug, PartialEq)]
+pub struct SipHasher;
+
+impl MerkleHasher for SipHasher {
+    type Hash = [u8; 8];
+
+    fn hash<T: AsRef<[u8]>>(data: &T) -> Self::Hash {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        hasher.write(data.as_ref());
+        hasher.finish().to_le_bytes()
     }
 }
