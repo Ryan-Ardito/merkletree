@@ -3,7 +3,7 @@
 
 #![allow(type_alias_bounds)]
 
-use crate::hashing::{DefaultMerkleHasher, MerkleHasher};
+use crate::hashing::{Sha256, MerkleHasher};
 use crate::proof::{MerkleProof, ProofNode, Side};
 
 /******************************************************************************
@@ -36,18 +36,18 @@ Implementation improvements:
 /// assert!(tree.verify(&proof, &"foo", root));
 /// ```
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct MerkleTree<H: MerkleHasher = DefaultMerkleHasher> {
-    layers: Vec<Vec<H::MerkleHash>>,
+pub struct MerkleTree<H: MerkleHasher = Sha256> {
+    layers: Vec<Vec<H::Hash>>,
 }
 
 /// Layer in tree
-type Layer<H: MerkleHasher> = Vec<H::MerkleHash>;
+type Layer<H: MerkleHasher> = Vec<H::Hash>;
 
 impl MerkleTree {
     /// Construct a MerkleTree from a sequence of elements
     pub fn new<T: AsRef<[u8]>>(elements: &[T]) -> Self {
-        let leaves: Vec<<DefaultMerkleHasher as MerkleHasher>::MerkleHash> =
-            elements.iter().map(DefaultMerkleHasher::hash).collect();
+        let leaves: Vec<<Sha256 as MerkleHasher>::Hash> =
+            elements.iter().map(Sha256::hash).collect();
         MerkleTree::from_leaves(leaves)
     }
 }
@@ -55,12 +55,12 @@ impl MerkleTree {
 impl<H: MerkleHasher> MerkleTree<H> {
     /// Use a custom hasher
     pub fn new_with_hasher<T: AsRef<[u8]>>(elements: &[T]) -> Self {
-        let leaves: Vec<H::MerkleHash> = elements.iter().map(H::hash).collect();
+        let leaves: Vec<H::Hash> = elements.iter().map(H::hash).collect();
         MerkleTree::from_leaves(leaves)
     }
 
     /// return the root hash
-    pub fn root(&self) -> Option<H::MerkleHash> {
+    pub fn root(&self) -> Option<H::Hash> {
         Some(self.layers.last()?[0])
     }
 
@@ -110,7 +110,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
         &self,
         proof: &MerkleProof<H>,
         element: &T,
-        root: H::MerkleHash,
+        root: H::Hash,
     ) -> bool {
         let hash = H::hash(element);
         self.verify_proof(proof, hash, root)
@@ -161,7 +161,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
         MerkleTree { layers }
     }
 
-    fn proof(&self, hash: H::MerkleHash) -> Result<MerkleProof<H>, &str> {
+    fn proof(&self, hash: H::Hash) -> Result<MerkleProof<H>, &str> {
         // find index of leaf
         let mut idx = self.layers[0]
             .iter()
@@ -182,7 +182,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
         Ok(proof)
     }
 
-    fn insert_hash(&mut self, hash: H::MerkleHash) {
+    fn insert_hash(&mut self, hash: H::Hash) {
         let leaves = &mut self.layers[0];
         // check for first repeated element
         for i in 1..leaves.len() {
@@ -217,8 +217,8 @@ impl<H: MerkleHasher> MerkleTree<H> {
     fn verify_proof(
         &self,
         proof: &MerkleProof<H>,
-        hash: H::MerkleHash,
-        root: H::MerkleHash,
+        hash: H::Hash,
+        root: H::Hash,
     ) -> bool {
         // verify provided root matches tree root
         let tree_root = self.root();
@@ -246,8 +246,8 @@ mod tests {
     #[derive(Clone, Copy)]
     struct DumbHasher;
     impl MerkleHasher for DumbHasher {
-        type MerkleHash = [u8; 2];
-        fn hash<T: AsRef<[u8]>>(_data: &T) -> Self::MerkleHash {
+        type Hash = [u8; 2];
+        fn hash<T: AsRef<[u8]>>(_data: &T) -> Self::Hash {
             [0, 0]
         }
     }
@@ -258,10 +258,10 @@ mod tests {
         let tree = MerkleTree::new(&elements);
         assert_eq!(
             tree.root(),
-            Some(DefaultMerkleHasher::hash(
+            Some(Sha256::hash(
                 &[
-                    DefaultMerkleHasher::hash(&"foo"),
-                    DefaultMerkleHasher::hash(&"bar")
+                    Sha256::hash(&"foo"),
+                    Sha256::hash(&"bar")
                 ]
                 .concat()
             ))
@@ -329,7 +329,7 @@ mod tests {
         let tree = MerkleTree::new(&elements);
         let proof = tree.gen_proof(&"foo").unwrap();
         assert_eq!(proof.len(), 1);
-        assert_eq!(proof[0].hash, DefaultMerkleHasher::hash(&"bar"));
+        assert_eq!(proof[0].hash, Sha256::hash(&"bar"));
         assert!(tree.gen_proof(&"baz").is_err());
     }
 

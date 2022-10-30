@@ -9,7 +9,7 @@ pub type MerkleProof<H> = Vec<ProofNode<H>>;
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ProofNode<H: MerkleHasher> {
     /// The nodes hash
-    pub hash: H::MerkleHash,
+    pub hash: H::Hash,
     /// Left of Right child of parent node
     pub side: Side,
 }
