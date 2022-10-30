@@ -1,7 +1,10 @@
 //! A Merkle Tree hashed datastructure that allows the contruction of proofs,
 //! which allow proving membership in the tree to a party that only knows the root hash
+
 #![allow(type_alias_bounds)]
+
 use crate::hashing::{MerkleHasher, DefaultMerkleHasher};
+use crate::proof::{MerkleProof, ProofNode, Side};
 
 /// Build merkle trees, get proofs, and verify proofs from hashabe data
 /// ```
@@ -18,26 +21,8 @@ pub struct MerkleTree<H: MerkleHasher = DefaultMerkleHasher> {
     layers: Vec<Vec<H::MerkleHash>>,
 }
 
-/// Chain of siblings up to the root
-pub type MerkleProof<H> = Vec<ProofNode<H>>;
 /// Layer in tree
 type Layer<H: MerkleHasher> = Vec<H::MerkleHash>;
-
-/// Left or Right child of a parent
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Side {
-    /// Left sibling
-    Left,
-    /// Right sibling
-    Right,
-}
-
-/// element hash and side of node
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct ProofNode<H: MerkleHasher> {
-    hash: H::MerkleHash,
-    side: Side,
-}
 
 impl MerkleTree {
     /// Construct a MerkleTree from a sequence of elements
@@ -53,7 +38,7 @@ impl MerkleTree {
 impl<H: MerkleHasher> MerkleTree<H> {
     /// Use a custom hasher
     pub fn new_with_hasher<T: AsRef<[u8]>>(elements: &Vec<T>) -> Self {
-        let leaves: Layer<H> = elements
+        let leaves: Vec<H::MerkleHash> = elements
             .iter()
             .map(|elem| H::hash(elem))
             .collect();
@@ -63,6 +48,21 @@ impl<H: MerkleHasher> MerkleTree<H> {
     /// return the root hash
     pub fn root(&self) -> Option<H::MerkleHash> {
         Some(self.layers.last()?[0])
+    }
+
+    /// Depth is the distance of the furthest node from the root
+    ///      0
+    ///    /   \
+    ///   1     1
+    ///  / \   / \
+    /// 2   2 2   2
+    /// 
+    /// Returns None if tree is empty
+    pub fn depth(&self) -> Option<usize> {
+        match self.layers.len() {
+            0 => None,
+            n => Some(n - 1),
+        }
     }
 
     /// add data to the tree
