@@ -12,7 +12,7 @@ pub trait MerkleHasher: Clone {
 }
 
 /// Default hasher for merkletree
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefaultMerkleHasher;
 
 impl MerkleHasher for DefaultMerkleHasher {

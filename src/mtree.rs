@@ -43,18 +43,16 @@ type Layer<H: MerkleHasher> = Vec<H::MerkleHash>;
 
 impl MerkleTree {
     /// Construct a MerkleTree from a sequence of elements
-    pub fn new<T: AsRef<[u8]>>(elements: &Vec<T>) -> Self {
-        let leaves: Vec<<DefaultMerkleHasher as MerkleHasher>::MerkleHash> = elements
-            .iter()
-            .map(|elem| DefaultMerkleHasher::hash(elem))
-            .collect();
+    pub fn new<T: AsRef<[u8]>>(elements: &[T]) -> Self {
+        let leaves: Vec<<DefaultMerkleHasher as MerkleHasher>::MerkleHash> =
+            elements.iter().map(DefaultMerkleHasher::hash).collect();
         MerkleTree::from_leaves(leaves)
     }
 }
 
 impl<H: MerkleHasher> MerkleTree<H> {
     /// Use a custom hasher
-    pub fn new_with_hasher<T: AsRef<[u8]>>(elements: &Vec<T>) -> Self {
+    pub fn new_with_hasher<T: AsRef<[u8]>>(elements: &[T]) -> Self {
         let leaves: Vec<H::MerkleHash> = elements.iter().map(|elem| H::hash(elem)).collect();
         MerkleTree::from_leaves(leaves)
     }
@@ -127,7 +125,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
     /// Repeat last hash until leaves.len() is a power of 2
     fn pad_layer(layer: &mut Layer<H>) {
-        if layer.len() == 0 {
+        if layer.is_empty() {
             return;
         }
         let mut target_len = 1;
@@ -137,7 +135,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
         }
         // repeat last hash to reach target len
         for _ in 0..(target_len - layer.len()) {
-            layer.push(layer.last().unwrap().clone());
+            layer.push(*layer.last().unwrap());
         }
         assert!(layer.len() & (layer.len() - 1) == 0);
     }
@@ -252,6 +250,15 @@ mod tests {
                 .concat()
             ))
         );
+    }
+
+    #[test]
+    fn test_depth() {
+        let elements = vec!["foo", "bar"];
+        let mut tree = MerkleTree::new(&elements);
+        assert_eq!(tree.depth(), Some(1));
+        tree.insert("baz");
+        assert_eq!(tree.depth(), Some(2));
     }
 
     #[test]
