@@ -1,17 +1,17 @@
-//! A Merkle Tree is a hashed datastructure that allows the contruction of proofs.
-//! a proof allows proving membership in the tree to a party that only knows the root hash.
+//! Merkle Tree implementations
 
 #![allow(type_alias_bounds)]
 
 use crate::hashing::{MerkleHasher, Sha256};
 
-/***********************************TODO**************************************
+/********************************** TODO *************************************
 
 API design decisions:
   - Should gen_proof return Result or Option? (Currently Result)
   - Should the new() constructor create an empty tree,
     or always from a vec of elems?
   - More getter functions?
+  - Custom hasher passed as arg instead of generic?
 
 Implementation improvements:
   - Root hash and proof should match other implementations for given data.
@@ -22,7 +22,8 @@ Implementation improvements:
  *****************************************************************************/
 
 /// Concatenate hashes prepended with the internal node prefix
-fn concat_bytes<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
+/// TODO: Make into a macro?
+fn concat_val_order<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
     let (left, right) = (left.as_ref(), right.as_ref());
     match left < right {
         true => [left, right].concat(),
@@ -141,7 +142,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
             for i in (0..layers.last().unwrap().len()).step_by(2) {
                 let left = layers.last().unwrap()[i];
                 let right = layers.last().unwrap()[i + 1];
-                let parent = H::hash(&concat_bytes(left, right));
+                let parent = H::hash(&concat_val_order(left, right));
                 layer.push(parent);
             }
             layers.push(layer);
@@ -219,7 +220,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
             };
             // rehash parent node
             let parent_idx = node_idx / 2;
-            self.layers[layer_idx + 1][parent_idx] = H::hash(&concat_bytes(left, right));
+            self.layers[layer_idx + 1][parent_idx] = H::hash(&concat_val_order(left, right));
             node_idx = parent_idx;
         }
     }
@@ -238,7 +239,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
                 true => (*hash, running_hash),
                 false => (running_hash, *hash),
             };
-            running_hash = H::hash(&concat_bytes(left, right));
+            running_hash = H::hash(&concat_val_order(left, right));
         }
         Some(running_hash) == tree_root
     }
@@ -246,6 +247,8 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
 #[cfg(test)]
 mod tests {
+    use crate::hashing::SipHasher;
+
     use super::*;
 
     #[derive(Clone, Copy)]
@@ -264,7 +267,19 @@ mod tests {
         assert_eq!(
             tree.root(),
             Some(Sha256::hash(
-                &[Sha256::hash(&"foo"), Sha256::hash(&"bar")].concat()
+                &concat_val_order(Sha256::hash(&"foo"), Sha256::hash(&"bar"))
+            ))
+        );
+    }
+
+    #[test]
+    fn test_siphasher() {
+        let elements = vec!["foo", "bar"];
+        let tree = MerkleTree::<SipHasher>::new_with_hasher(&elements);
+        assert_eq!(
+            tree.root(),
+            Some(SipHasher::hash(
+                &concat_val_order(SipHasher::hash(&"foo"), SipHasher::hash(&"bar"))
             ))
         );
     }

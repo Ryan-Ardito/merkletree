@@ -10,6 +10,9 @@ use tiny_keccak::{Hasher as TinyHasher, Keccak};
 /// ```
 /// use merkletree::{MerkleTree, MerkleHasher};
 ///
+/// let elements = vec!["foo", "bar"];
+/// let tree = MerkleTree::<MyHasher>::new_with_hasher(&elements);
+///
 /// struct MyHasher;
 ///
 /// impl MerkleHasher for MyHasher {
@@ -20,9 +23,6 @@ use tiny_keccak::{Hasher as TinyHasher, Keccak};
 ///         return [0; 32]
 ///     }
 /// }
-///
-/// let elements = vec!["foo", "bar"];
-/// let tree = MerkleTree::<MyHasher>::new_with_hasher(&elements);
 /// ```
 pub trait MerkleHasher {
     /// type produced by hasher
