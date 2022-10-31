@@ -39,7 +39,7 @@ fn concat_val_order<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
 /// use merkletree::MerkleTree;
 ///
 /// let data = vec!["foo", "bar"];
-/// let tree = MerkleTree::new(&data);
+/// let tree = MerkleTree::from_array(&data);
 /// let root = tree.root().unwrap();
 /// let proof = tree.gen_proof(&"foo").unwrap();
 /// assert!(tree.verify(&proof, &"foo", root));
@@ -50,8 +50,13 @@ pub struct MerkleTree<H: MerkleHasher = Sha256> {
 }
 
 impl MerkleTree {
-    /// Construct a MerkleTree from a sequence of elements
-    pub fn new<T: AsRef<[u8]>>(elements: &[T]) -> Self {
+    /// Construct empty merkle tree.
+    pub fn new() -> Self {
+        Self { layers: Vec::new() }
+    }
+
+    /// Construct a MerkleTree from a sequence of elements.
+    pub fn from_array<T: AsRef<[u8]>>(elements: &[T]) -> Self {
         let leaves: Vec<<Sha256 as MerkleHasher>::Hash> =
             elements.iter().map(Sha256::hash).collect();
         MerkleTree::from_leaves(leaves)
@@ -63,6 +68,15 @@ impl<H: MerkleHasher> MerkleTree<H> {
     pub fn new_with_hasher<T: AsRef<[u8]>>(elements: &[T]) -> Self {
         let leaves: Vec<H::Hash> = elements.iter().map(H::hash).collect();
         MerkleTree::from_leaves(leaves)
+    }
+
+    /// Add data elements from a reference to an array.
+    /// TODO: rewrite to be faster.
+    pub fn add_elems<T: AsRef<[u8]>>(&mut self, elements: &[T]) {
+        let new_leaves: Vec<H::Hash> = elements.iter().map(H::hash).collect();
+        for hash in new_leaves {
+            self.insert_hash(hash)
+        }
     }
 
     /// return the root hash
@@ -86,8 +100,6 @@ impl<H: MerkleHasher> MerkleTree<H> {
     ///       1     1
     ///      / \   / \
     ///     2   2 2   2
-    ///    / \
-    ///   3   3
     /// ```
     ///
     /// Returns None if tree is empty
@@ -106,7 +118,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
     /// use merkletree::MerkleTree;
     ///
     /// let elements = vec!["foo", "bar"];
-    /// let mut tree = MerkleTree::new(&elements);
+    /// let mut tree = MerkleTree::from_array(&elements);
     /// tree.insert(&"baz");
     /// tree.insert(&"quox");
     /// ```
@@ -195,6 +207,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
     }
 
     fn insert_hash(&mut self, hash: H::Hash) {
+        if self.layers.is_empty() { self.layers.push(Vec::new())}
         let leaves = &mut self.layers[0];
         // check for first repeated element
         for i in 1..leaves.len() {
@@ -262,8 +275,10 @@ mod tests {
 
     #[test]
     fn new_tree_root() {
+        let mut tree = MerkleTree::new();
+        assert_eq!(tree.root(), None);
         let elements = vec!["foo", "bar"];
-        let tree = MerkleTree::new(&elements);
+        tree.add_elems(&elements);
         assert_eq!(
             tree.root(),
             Some(Sha256::hash(
@@ -287,7 +302,7 @@ mod tests {
     #[test]
     fn test_depth() {
         let elements = vec!["foo", "bar"];
-        let mut tree = MerkleTree::new(&elements);
+        let mut tree = MerkleTree::from_array(&elements);
         assert_eq!(tree.depth(), Some(1));
         tree.insert(&"baz");
         assert_eq!(tree.depth(), Some(2));
@@ -296,7 +311,7 @@ mod tests {
     #[test]
     fn test_contains() {
         let elements = vec!["foo", "bar"];
-        let mut tree = MerkleTree::new(&elements);
+        let mut tree = MerkleTree::from_array(&elements);
         assert!(tree.contains(&"foo"));
         assert!(!tree.contains(&"baz"));
         tree.insert(&"baz");
@@ -316,8 +331,8 @@ mod tests {
     #[test]
     fn empty_tree() {
         let empty_vec: Vec<&str> = vec![];
-        let mut empty_tree = MerkleTree::new(&empty_vec);
-        let prefill_tree = MerkleTree::new(&vec!["foo", "bar"]);
+        let mut empty_tree = MerkleTree::from_array(&empty_vec);
+        let prefill_tree = MerkleTree::from_array(&vec!["foo", "bar"]);
         empty_tree.insert(&"foo");
         assert_ne!(empty_tree, prefill_tree);
         empty_tree.insert(&"bar");
@@ -327,7 +342,7 @@ mod tests {
     #[test]
     fn insert() {
         let elements = vec!["foo", "bar"];
-        let mut tree = MerkleTree::new(&elements);
+        let mut tree = MerkleTree::from_array(&elements);
         assert!(tree.gen_proof(&"baz").is_err());
         tree.insert(&"baz");
         let proof = tree.gen_proof(&"baz");
@@ -342,7 +357,7 @@ mod tests {
     #[test]
     fn proof() {
         let elements = vec!["foo", "bar"];
-        let tree = MerkleTree::new(&elements);
+        let tree = MerkleTree::from_array(&elements);
         let proof = tree.gen_proof(&"foo").unwrap();
         assert_eq!(proof.len(), 1);
         assert_eq!(proof[0], Sha256::hash(&"bar"));
@@ -352,7 +367,7 @@ mod tests {
     #[test]
     fn verify() {
         let elements = vec!["foo", "bar"];
-        let tree = MerkleTree::new(&elements);
+        let tree = MerkleTree::from_array(&elements);
         let root = tree.root().unwrap();
         let proof = tree.gen_proof(&"foo").unwrap();
         assert!(tree.verify(&proof, &"foo", root));
@@ -364,7 +379,7 @@ mod tests {
     #[test]
     fn tree_should_be_perfect() {
         let elements = vec!["foo", "bar", "baz"];
-        let tree = MerkleTree::new(&elements);
+        let tree = MerkleTree::from_array(&elements);
 
         let tree_height = tree.layers.len();
         let leaves = &tree.layers[0];

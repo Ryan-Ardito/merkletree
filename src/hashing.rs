@@ -52,8 +52,8 @@ impl MerkleHasher for Sha256 {
     }
 }
 
-/// Rust DefaultHasher used in HashMap and HashSet
-/// 64bit, not cryptographically secure, but much faster than SHA3
+/// Rust DefaultHasher used in HashMap and HashSet.
+/// 64bit, not cryptographically secure, but much faster than SHA3.
 #[derive(Debug, PartialEq, Eq)]
 pub struct SipHasher;
 

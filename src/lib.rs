@@ -1,4 +1,4 @@
-//! A Merkle Tree is a hashed datastructure that can construct proofs.
+//! A Merkle Tree is a hashed datastructure that can store the hashes of data and construct proofs.
 //! Merkle proofs allow proving membership in a tree to a party that only knows the root hash.
 //! 
 //! This implementation of Merkle Tree has an API for data, but does not store any
