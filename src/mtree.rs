@@ -48,11 +48,6 @@ pub struct MerkleTree<H: MerkleHasher = Sha256> {
     layers: Vec<Vec<H::Hash>>,
 }
 
-/// Layer in tree
-type Layer<H: MerkleHasher> = Vec<H::Hash>;
-/// Partial tree in merkle proof
-type MerkleProof<H: MerkleHasher> = Vec<H::Hash>;
-
 impl MerkleTree {
     /// Construct a MerkleTree from a sequence of elements
     pub fn new<T: AsRef<[u8]>>(elements: &[T]) -> Self {
@@ -121,24 +116,19 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
     /// Generate a merkle proof from hashable data.
     /// Return Err if hash of data not in tree
-    pub fn gen_proof<T: AsRef<[u8]>>(&self, element: &T) -> Result<MerkleProof<H>, &str> {
+    pub fn gen_proof<T: AsRef<[u8]>>(&self, element: &T) -> Result<Vec<H::Hash>, &str> {
         let hash = H::hash(element);
         self.proof(hash)
     }
 
     /// Verify that element is a member of the tree
-    pub fn verify<T: AsRef<[u8]>>(
-        &self,
-        proof: &MerkleProof<H>,
-        element: &T,
-        root: H::Hash,
-    ) -> bool {
+    pub fn verify<T: AsRef<[u8]>>(&self, proof: &Vec<H::Hash>, element: &T, root: H::Hash) -> bool {
         let hash = H::hash(element);
         self.verify_proof(proof, hash, root)
     }
 
     /// Generate a merkle tree from a vec of leaf hashes
-    fn build_layers(mut leaves: Layer<H>) -> Vec<Layer<H>> {
+    fn build_layers(mut leaves: Vec<H::Hash>) -> Vec<Vec<H::Hash>> {
         // ensure leaves.len() is a power of 2 so tree is perfect
         Self::pad_layer(&mut leaves);
         let mut layers = Vec::new();
@@ -146,7 +136,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
         // build layers up to root
         while layers.last().unwrap().len() > 1 {
-            let mut layer: Layer<H> = Vec::new();
+            let mut layer: Vec<H::Hash> = Vec::new();
             // iterate over hashes in pairs to generate parent hash
             for i in (0..layers.last().unwrap().len()).step_by(2) {
                 let left = layers.last().unwrap()[i];
@@ -160,7 +150,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
     }
 
     /// Repeat last hash until leaves.len() is a power of 2
-    fn pad_layer(layer: &mut Layer<H>) {
+    fn pad_layer(layer: &mut Vec<H::Hash>) {
         if layer.is_empty() {
             return;
         }
@@ -177,12 +167,12 @@ impl<H: MerkleHasher> MerkleTree<H> {
         debug_assert!(layer.len() & (layer.len() - 1) == 0);
     }
 
-    fn from_leaves(leaves: Layer<H>) -> Self {
+    fn from_leaves(leaves: Vec<H::Hash>) -> Self {
         let layers = Self::build_layers(leaves);
         MerkleTree { layers }
     }
 
-    fn proof(&self, hash: H::Hash) -> Result<MerkleProof<H>, &str> {
+    fn proof(&self, hash: H::Hash) -> Result<Vec<H::Hash>, &str> {
         // find index of leaf
         let mut idx = self.layers[0]
             .iter()
@@ -234,7 +224,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
         }
     }
 
-    fn verify_proof(&self, proof: &MerkleProof<H>, hash: H::Hash, root: H::Hash) -> bool {
+    fn verify_proof(&self, proof: &Vec<H::Hash>, hash: H::Hash, root: H::Hash) -> bool {
         // verify provided root matches tree root
         let tree_root = self.root();
         if Some(root) != tree_root || !self.layers[0].contains(&hash) {
