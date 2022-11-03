@@ -21,13 +21,19 @@ Implementation improvements:
 
  *****************************************************************************/
 
-/// Concatenate hashes prepended with the internal node prefix
+/// prepended to the concatenations of internal nodes
+const INTERNAL_PREFIX: [u8; 1] = 1u8.to_le_bytes();
+/// prepended to the concatenations of leaf nodes
+const LEAF_PREFIX: [u8; 1] = 0u8.to_le_bytes();
+
+/// Concatenate hashes prepended with a prefix. Leaf nodes and internal nodes are
+/// prepended with a different prefix. This is done to prevent second pre-image attacks.
 /// TODO: Make into a macro?
-fn concat_val_order<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
+fn concat_hashes<T: AsRef<[u8]>>(left: T, right: T, prefix: &[u8]) -> Vec<u8> {
     let (left, right) = (left.as_ref(), right.as_ref());
     match left < right {
-        true => [left, right].concat(),
-        false => [right, left].concat(),
+        true => [prefix, left, right].concat(),
+        false => [prefix, right, left].concat(),
     }
 }
 
@@ -145,7 +151,12 @@ impl<H: MerkleHasher> MerkleTree<H> {
     }
 
     /// Verify that element is a member of the tree
-    pub fn verify<T: AsRef<[u8]>>(&self, proof: &MerkleProof<H>, element: &T, root: H::Hash) -> bool {
+    pub fn verify<T: AsRef<[u8]>>(
+        &self,
+        proof: &MerkleProof<H>,
+        element: &T,
+        root: H::Hash,
+    ) -> bool {
         let hash = H::hash(element);
         self.verify_proof(proof, hash, root)
     }
@@ -158,16 +169,18 @@ impl<H: MerkleHasher> MerkleTree<H> {
         layers.push(leaves);
 
         // build layers up to root
+        let mut prefix = &LEAF_PREFIX;
         while layers.last().unwrap().len() > 1 {
             let mut layer: Vec<H::Hash> = Vec::new();
             // iterate over hashes in pairs to generate parent hash
             for i in (0..layers.last().unwrap().len()).step_by(2) {
                 let left = layers.last().unwrap()[i];
                 let right = layers.last().unwrap()[i + 1];
-                let parent = H::hash(&concat_val_order(left, right));
+                let parent = H::hash(&concat_hashes(left, right, prefix));
                 layer.push(parent);
             }
             layers.push(layer);
+            prefix = &INTERNAL_PREFIX;
         }
         layers
     }
@@ -236,17 +249,19 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
     fn recalculate_branch(&mut self, leaf_idx: usize) {
         let mut node_idx = leaf_idx;
+        let mut prefix = &LEAF_PREFIX;
         for layer_idx in 0..self.layers.len() - 1 {
             let layer = &self.layers[layer_idx];
-            // determine if new leaf is left or right child
+            // determine if new leaf is left or right child and find its sibling
             let (left, right) = match node_idx % 2 == 0 {
                 true => (layer[node_idx], layer[node_idx + 1]),
                 false => (layer[node_idx - 1], layer[node_idx]),
             };
             // rehash parent node
             let parent_idx = node_idx / 2;
-            self.layers[layer_idx + 1][parent_idx] = H::hash(&concat_val_order(left, right));
+            self.layers[layer_idx + 1][parent_idx] = H::hash(&concat_hashes(left, right, prefix));
             node_idx = parent_idx;
+            prefix = &INTERNAL_PREFIX;
         }
     }
 
@@ -259,12 +274,14 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
         // hash proof nodes up to root
         let mut running_hash = hash;
+        let mut prefix = &LEAF_PREFIX;
         for hash in proof {
             let (left, right) = match hash.as_ref() < running_hash.as_ref() {
                 true => (*hash, running_hash),
                 false => (running_hash, *hash),
             };
-            running_hash = H::hash(&concat_val_order(left, right));
+            running_hash = H::hash(&concat_hashes(left, right, prefix));
+            prefix = &INTERNAL_PREFIX;
         }
         Some(running_hash) == tree_root
     }
@@ -293,9 +310,10 @@ mod tests {
         tree.add_elems(&elements);
         assert_eq!(
             tree.root(),
-            Some(Sha256::hash(&concat_val_order(
+            Some(Sha256::hash(&concat_hashes(
                 Sha256::hash(&"foo"),
-                Sha256::hash(&"bar")
+                Sha256::hash(&"bar"),
+                &LEAF_PREFIX,
             )))
         );
     }
@@ -306,9 +324,10 @@ mod tests {
         let tree = MerkleTree::<SipHasher>::from_array_with_hasher(&elements);
         assert_eq!(
             tree.root(),
-            Some(SipHasher::hash(&concat_val_order(
+            Some(SipHasher::hash(&concat_hashes(
                 SipHasher::hash(&"foo"),
-                SipHasher::hash(&"bar")
+                SipHasher::hash(&"bar"),
+                &LEAF_PREFIX,
             )))
         );
     }
