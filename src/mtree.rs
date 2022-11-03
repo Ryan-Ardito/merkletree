@@ -49,6 +49,10 @@ pub struct MerkleTree<H: MerkleHasher = Sha256> {
     layers: Vec<Vec<H::Hash>>,
 }
 
+/// MerkleProof is a vector of hashes. No other data is needed,
+/// as hashes are always concatenated in ascending order.
+type MerkleProof<H: MerkleHasher> = Vec<H::Hash>;
+
 impl Default for MerkleTree {
     fn default() -> Self {
         Self::new()
@@ -141,7 +145,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
     }
 
     /// Verify that element is a member of the tree
-    pub fn verify<T: AsRef<[u8]>>(&self, proof: &Vec<H::Hash>, element: &T, root: H::Hash) -> bool {
+    pub fn verify<T: AsRef<[u8]>>(&self, proof: &MerkleProof<H>, element: &T, root: H::Hash) -> bool {
         let hash = H::hash(element);
         self.verify_proof(proof, hash, root)
     }
@@ -191,7 +195,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
         MerkleTree { layers }
     }
 
-    fn proof(&self, hash: H::Hash) -> Result<Vec<H::Hash>, &str> {
+    fn proof(&self, hash: H::Hash) -> Result<MerkleProof<H>, &str> {
         // find index of leaf
         let mut idx = self.layers[0]
             .iter()
@@ -246,7 +250,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
         }
     }
 
-    fn verify_proof(&self, proof: &Vec<H::Hash>, hash: H::Hash, root: H::Hash) -> bool {
+    fn verify_proof(&self, proof: &MerkleProof<H>, hash: H::Hash, root: H::Hash) -> bool {
         // verify provided root matches tree root
         let tree_root = self.root();
         if Some(root) != tree_root || !self.layers[0].contains(&hash) {
