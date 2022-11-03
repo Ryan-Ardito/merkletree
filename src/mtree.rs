@@ -8,23 +8,21 @@ use crate::hashing::{MerkleHasher, Sha256};
 
 API design decisions:
   - Should gen_proof return Result or Option? (Currently Result)
-  - Should the new() constructor create an empty tree,
-    or always from a vec of elems?
+  - Should MerkleHasher::Hash be Copy?
   - More getter functions?
   - Custom hasher passed as arg instead of generic?
 
 Implementation improvements:
   - Root hash and proof should match other implementations for given data.
-  - Second preimage attack resistance
   - More efficient storage
   - Better runtime speed
 
  *****************************************************************************/
 
-/// prepended to the concatenations of internal nodes
-const INTERNAL_PREFIX: [u8; 1] = 1u8.to_le_bytes();
 /// prepended to the concatenations of leaf nodes
 const LEAF_PREFIX: [u8; 1] = 0u8.to_le_bytes();
+/// prepended to the concatenations of internal nodes
+const INTERNAL_PREFIX: [u8; 1] = 1u8.to_le_bytes();
 
 /// Concatenate hashes prepended with a prefix. Leaf nodes and internal nodes are
 /// prepended with a different prefix. This is done to prevent second pre-image attacks.
@@ -79,6 +77,7 @@ impl MerkleTree {
     }
 }
 
+/// Data API
 impl<H: MerkleHasher> MerkleTree<H> {
     /// Construct a MerkleTree from a sequence of elements.
     pub fn from_array_with_hasher<T: AsRef<[u8]>>(elements: &[T]) -> Self {
@@ -95,34 +94,12 @@ impl<H: MerkleHasher> MerkleTree<H> {
         }
     }
 
-    /// return the root hash
-    pub fn root(&self) -> Option<H::Hash> {
-        Some(self.layers.last()?[0])
-    }
-
     /// Return true if data is in the tree
     pub fn contains<T: AsRef<[u8]>>(&self, data: &T) -> bool {
         let hash = H::hash(data);
         match self.layers.first() {
             None => false,
             Some(layer) => layer.iter().any(|elem| hash == *elem),
-        }
-    }
-
-    /// Depth is the distance of the furthest node from the root
-    /// ```text
-    ///          0
-    ///        /   \
-    ///       1     1
-    ///      / \   / \
-    ///     2   2 2   2
-    /// ```
-    ///
-    /// Returns None if tree is empty
-    pub fn depth(&self) -> Option<usize> {
-        match self.layers.len() {
-            0 => None,
-            n => Some(n - 1),
         }
     }
 
@@ -159,6 +136,31 @@ impl<H: MerkleHasher> MerkleTree<H> {
     ) -> bool {
         let hash = H::hash(element);
         self.verify_proof(proof, hash, root)
+    }
+}
+
+/// Hash API
+impl<H: MerkleHasher> MerkleTree<H> {
+    /// return the root hash
+    pub fn root(&self) -> Option<H::Hash> {
+        Some(self.layers.last()?[0])
+    }
+
+    /// Depth is the distance of the furthest node from the root
+    /// ```text
+    ///          0
+    ///        /   \
+    ///       1     1
+    ///      / \   / \
+    ///     2   2 2   2
+    /// ```
+    ///
+    /// Returns None if tree is empty
+    pub fn depth(&self) -> Option<usize> {
+        match self.layers.len() {
+            0 => None,
+            n => Some(n - 1),
+        }
     }
 
     /// Generate a merkle tree from a vec of leaf hashes
@@ -229,6 +231,27 @@ impl<H: MerkleHasher> MerkleTree<H> {
         Ok(proof)
     }
 
+    fn verify_proof(&self, proof: &MerkleProof<H>, hash: H::Hash, root: H::Hash) -> bool {
+        // verify provided root matches tree root
+        let tree_root = self.root();
+        if Some(root) != tree_root || !self.layers[0].contains(&hash) {
+            return false;
+        }
+
+        // hash proof nodes up to root
+        let mut running_hash = hash;
+        let mut prefix = &LEAF_PREFIX;
+        for hash in proof {
+            let (left, right) = match hash.as_ref() < running_hash.as_ref() {
+                true => (*hash, running_hash),
+                false => (running_hash, *hash),
+            };
+            running_hash = H::hash(&concat_hashes(left, right, prefix));
+            prefix = &INTERNAL_PREFIX;
+        }
+        Some(running_hash) == tree_root
+    }
+
     fn insert_hash(&mut self, hash: H::Hash) {
         if self.layers.is_empty() {
             self.layers.push(Vec::new())
@@ -263,27 +286,6 @@ impl<H: MerkleHasher> MerkleTree<H> {
             node_idx = parent_idx;
             prefix = &INTERNAL_PREFIX;
         }
-    }
-
-    fn verify_proof(&self, proof: &MerkleProof<H>, hash: H::Hash, root: H::Hash) -> bool {
-        // verify provided root matches tree root
-        let tree_root = self.root();
-        if Some(root) != tree_root || !self.layers[0].contains(&hash) {
-            return false;
-        }
-
-        // hash proof nodes up to root
-        let mut running_hash = hash;
-        let mut prefix = &LEAF_PREFIX;
-        for hash in proof {
-            let (left, right) = match hash.as_ref() < running_hash.as_ref() {
-                true => (*hash, running_hash),
-                false => (running_hash, *hash),
-            };
-            running_hash = H::hash(&concat_hashes(left, right, prefix));
-            prefix = &INTERNAL_PREFIX;
-        }
-        Some(running_hash) == tree_root
     }
 }
 

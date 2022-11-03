@@ -11,6 +11,28 @@
 //! ```text
 //! parent hash = hash(lower_child, higher_child)
 //! ```
+//!
+//! # Examples
+//! ```
+//! use merkletree::MerkleTree;
+//!
+//! // instantiate an empty tree
+//! let empty_tree = MerkleTree::new();
+//!
+//! // instantiate a tree from a sequence of elements
+//! let elements = vec!["foo", "bar"];
+//! let mut tree = MerkleTree::from_array(&elements);
+//!
+//! // insert new elements into the tree
+//! tree.insert(&"baz");
+//!
+//! // generate proofs
+//! let proof = tree.gen_proof(&"baz").expect("data not in tree");
+//!
+//! // verify proofs
+//! let root = tree.root().expect("tree is empty");
+//! assert!(tree.verify(&proof, &"baz", root,));
+//! ```
 
 #![warn(missing_docs, rust_2018_idioms, missing_debug_implementations)]
 
