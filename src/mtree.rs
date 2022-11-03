@@ -49,13 +49,19 @@ pub struct MerkleTree<H: MerkleHasher = Sha256> {
     layers: Vec<Vec<H::Hash>>,
 }
 
+impl Default for MerkleTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MerkleTree {
     /// Construct empty merkle tree.
     pub fn new() -> Self {
         Self { layers: Vec::new() }
     }
 
-    /// Construct a MerkleTree from a sequence of elements.
+    /// Use a custom hasher
     pub fn from_array<T: AsRef<[u8]>>(elements: &[T]) -> Self {
         let leaves: Vec<<Sha256 as MerkleHasher>::Hash> =
             elements.iter().map(Sha256::hash).collect();
@@ -64,8 +70,8 @@ impl MerkleTree {
 }
 
 impl<H: MerkleHasher> MerkleTree<H> {
-    /// Use a custom hasher
-    pub fn new_with_hasher<T: AsRef<[u8]>>(elements: &[T]) -> Self {
+    /// Construct a MerkleTree from a sequence of elements.
+    pub fn from_array_with_hasher<T: AsRef<[u8]>>(elements: &[T]) -> Self {
         let leaves: Vec<H::Hash> = elements.iter().map(H::hash).collect();
         MerkleTree::from_leaves(leaves)
     }
@@ -207,7 +213,9 @@ impl<H: MerkleHasher> MerkleTree<H> {
     }
 
     fn insert_hash(&mut self, hash: H::Hash) {
-        if self.layers.is_empty() { self.layers.push(Vec::new())}
+        if self.layers.is_empty() {
+            self.layers.push(Vec::new())
+        }
         let leaves = &mut self.layers[0];
         // check for first repeated element
         for i in 1..leaves.len() {
@@ -281,21 +289,23 @@ mod tests {
         tree.add_elems(&elements);
         assert_eq!(
             tree.root(),
-            Some(Sha256::hash(
-                &concat_val_order(Sha256::hash(&"foo"), Sha256::hash(&"bar"))
-            ))
+            Some(Sha256::hash(&concat_val_order(
+                Sha256::hash(&"foo"),
+                Sha256::hash(&"bar")
+            )))
         );
     }
 
     #[test]
     fn test_siphasher() {
         let elements = vec!["foo", "bar"];
-        let tree = MerkleTree::<SipHasher>::new_with_hasher(&elements);
+        let tree = MerkleTree::<SipHasher>::from_array_with_hasher(&elements);
         assert_eq!(
             tree.root(),
-            Some(SipHasher::hash(
-                &concat_val_order(SipHasher::hash(&"foo"), SipHasher::hash(&"bar"))
-            ))
+            Some(SipHasher::hash(&concat_val_order(
+                SipHasher::hash(&"foo"),
+                SipHasher::hash(&"bar")
+            )))
         );
     }
 
@@ -321,7 +331,7 @@ mod tests {
     #[test]
     fn generic_hasher() {
         let elements = vec!["foo", "bar"];
-        let tree = MerkleTree::<DumbHasher>::new_with_hasher(&elements);
+        let tree = MerkleTree::<DumbHasher>::from_array_with_hasher(&elements);
         let proof = tree.gen_proof(&"baz").unwrap();
         let element = "quoz";
         let root = [0, 0];

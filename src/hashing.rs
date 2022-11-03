@@ -11,7 +11,7 @@ use tiny_keccak::{Hasher as TinyHasher, Keccak};
 /// use merkletree::{MerkleTree, MerkleHasher};
 ///
 /// let elements = vec!["foo", "bar"];
-/// let tree = MerkleTree::<MyHasher>::new_with_hasher(&elements);
+/// let tree = MerkleTree::<MyHasher>::from_array_with_hasher(&elements);
 ///
 /// struct MyHasher;
 ///
@@ -19,8 +19,8 @@ use tiny_keccak::{Hasher as TinyHasher, Keccak};
 ///     type Hash = [u8; 32];
 ///
 ///     fn hash<T: AsRef<[u8]>>(data: &T) -> Self::Hash {
-///         // do hashing and return
-///         return [0; 32]
+///         // do hashing and return result
+///         [0; 32]
 ///     }
 /// }
 /// ```
