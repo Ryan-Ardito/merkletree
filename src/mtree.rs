@@ -1,4 +1,4 @@
-//! Merkle Tree implementations
+//! Merkle Tree implementations and API.
 
 #![allow(type_alias_bounds)]
 
@@ -11,11 +11,14 @@ API design decisions:
   - Should MerkleHasher::Hash be Copy?
   - More getter functions?
   - Custom hasher passed as arg instead of generic?
+  - Split Hasher trait into two methods, like write and finish? Or 
+    use stdlib Hasher trait?
 
 Implementation improvements:
-  - Root hash and proof should match other implementations for given data.
+  - Root hash and proof should match other implementations for given data?
   - More efficient storage
   - Better runtime speed
+  - Threading?
 
  *****************************************************************************/
 
@@ -35,7 +38,7 @@ fn concat_hashes<T: AsRef<[u8]>>(left: T, right: T, prefix: &[u8]) -> Vec<u8> {
     }
 }
 
-/// Build merkle trees, get proofs, and verify proofs from hashabe data
+/// Build merkle trees, get proofs, and verify proofs from hashable data.
 ///
 /// # Examples
 ///
