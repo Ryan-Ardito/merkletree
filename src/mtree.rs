@@ -7,12 +7,9 @@ use crate::hashing::{MerkleHasher, Sha256};
 /********************************** TODO *************************************
 
 API design decisions:
-  - Should gen_proof return Result or Option? (Currently Result)
-  - Should MerkleHasher::Hash be Copy?
-  - More getter functions?
-  - Custom hasher passed as arg instead of generic?
-  - Split Hasher trait into two methods, like write and finish? Or 
-    use stdlib Hasher trait?
+  - Iterator over leaves that return hashes?
+  - Custom hasher passed as arg instead of generic? Hashbuilder?
+  - Split Hasher trait into two methods, like write and finish?
 
 Implementation improvements:
   - Root hash and proof should match other implementations for given data?
@@ -72,7 +69,7 @@ impl MerkleTree {
         Self { layers: Vec::new() }
     }
 
-    /// Use a custom hasher
+    /// Construct a merkletree from an array of elements.
     pub fn from_array<T: AsRef<[u8]>>(elements: &[T]) -> Self {
         let leaves: Vec<<Sha256 as MerkleHasher>::Hash> =
             elements.iter().map(Sha256::hash).collect();
@@ -82,6 +79,11 @@ impl MerkleTree {
 
 /// Data API
 impl<H: MerkleHasher> MerkleTree<H> {
+    /// Use a custom hasher.
+    pub fn with_hasher() -> Self {
+        Self { layers: Vec::new() }
+    }
+
     /// Construct a MerkleTree from a sequence of elements.
     pub fn from_array_with_hasher<T: AsRef<[u8]>>(elements: &[T]) -> Self {
         let leaves: Vec<H::Hash> = elements.iter().map(H::hash).collect();
@@ -166,6 +168,11 @@ impl<H: MerkleHasher> MerkleTree<H> {
         }
     }
 
+    fn from_leaves(leaves: Vec<H::Hash>) -> Self {
+        let layers = Self::build_layers(leaves);
+        MerkleTree { layers }
+    }
+
     /// Generate a merkle tree from a vec of leaf hashes
     fn build_layers(mut leaves: Vec<H::Hash>) -> Vec<Vec<H::Hash>> {
         // ensure leaves.len() is a power of 2 so tree is perfect
@@ -206,11 +213,6 @@ impl<H: MerkleHasher> MerkleTree<H> {
             layer.push(*layer.last().unwrap());
         }
         debug_assert!(layer.len() & (layer.len() - 1) == 0);
-    }
-
-    fn from_leaves(leaves: Vec<H::Hash>) -> Self {
-        let layers = Self::build_layers(leaves);
-        MerkleTree { layers }
     }
 
     fn proof(&self, hash: H::Hash) -> Result<MerkleProof<H>, &str> {

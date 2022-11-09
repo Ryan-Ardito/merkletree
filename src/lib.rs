@@ -13,6 +13,7 @@
 //! ```
 //!
 //! # Examples
+//!
 //! ```
 //! use merkletree::MerkleTree;
 //!
@@ -32,23 +33,22 @@
 //! // verify proofs
 //! let root = tree.root().expect("tree is empty");
 //! assert!(tree.verify(&proof, &"baz", root,));
-//! 
+//!
 //! // use a custom hasher
-//! use merkletree::MerkleHasher;
-//! 
-//! let elements = vec!["foo", "bar"];
-//! let tree = MerkleTree::<MyHasher>::from_array_with_hasher(&elements);
-//!
-//! struct MyHasher;
-//!
-//! impl MerkleHasher for MyHasher {
-//!     type Hash = [u8; 32];
-//!
-//!     fn hash<T: AsRef<[u8]>>(data: &T) -> Self::Hash {
-//!         // do hashing and return result
-//!         [0; 32]
-//!     }
-//! }
+//! # use merkletree::MerkleHasher;
+//! #
+//! let tree = MerkleTree::<MyHasher>::with_hasher();
+//! #
+//! # struct MyHasher;
+//! #
+//! # impl MerkleHasher for MyHasher {
+//! #     type Hash = [u8; 32];
+//! #
+//! #     fn hash<T: AsRef<[u8]>>(data: &T) -> Self::Hash {
+//! #         // do hashing and return result
+//! #         [0; 32]
+//! #     }
+//! # }
 //! ```
 
 #![warn(missing_docs, rust_2018_idioms, missing_debug_implementations)]
