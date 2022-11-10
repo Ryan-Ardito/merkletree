@@ -19,19 +19,14 @@ Implementation improvements:
 
  *****************************************************************************/
 
-/// prepended to the concatenations of leaf nodes
-const LEAF_PREFIX: [u8; 1] = 0u8.to_le_bytes();
-/// prepended to the concatenations of internal nodes
-const INTERNAL_PREFIX: [u8; 1] = 1u8.to_le_bytes();
-
 /// Concatenate hashes prepended with a prefix. Leaf nodes and internal nodes are
 /// prepended with a different prefix. This is done to prevent second pre-image attacks.
 /// TODO: Make into a macro?
-fn concat_hashes<T: AsRef<[u8]>>(left: T, right: T, prefix: &[u8]) -> Vec<u8> {
+fn concat_hashes<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
     let (left, right) = (left.as_ref(), right.as_ref());
     match left < right {
-        true => [prefix, left, right].concat(),
-        false => [prefix, right, left].concat(),
+        true => [left, right].concat(),
+        false => [right, left].concat(),
     }
 }
 
@@ -172,7 +167,10 @@ impl<H: MerkleHasher> MerkleTree<H> {
         let layers = Self::build_layers(leaves);
         MerkleTree { layers }
     }
+}
 
+/// business logic
+impl<H: MerkleHasher> MerkleTree<H> {
     /// Generate a merkle tree from a vec of leaf hashes
     fn build_layers(mut leaves: Vec<H::Hash>) -> Vec<Vec<H::Hash>> {
         // ensure leaves.len() is a power of 2 so tree is perfect
@@ -181,18 +179,16 @@ impl<H: MerkleHasher> MerkleTree<H> {
         layers.push(leaves);
 
         // build layers up to root
-        let mut prefix = &LEAF_PREFIX;
         while layers.last().unwrap().len() > 1 {
             let mut layer: Vec<H::Hash> = Vec::new();
             // iterate over hashes in pairs to generate parent hash
             for i in (0..layers.last().unwrap().len()).step_by(2) {
                 let left = layers.last().unwrap()[i];
                 let right = layers.last().unwrap()[i + 1];
-                let parent = H::hash(&concat_hashes(left, right, prefix));
+                let parent = H::hash(&concat_hashes(left, right));
                 layer.push(parent);
             }
             layers.push(layer);
-            prefix = &INTERNAL_PREFIX;
         }
         layers
     }
@@ -245,14 +241,12 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
         // hash proof nodes up to root
         let mut running_hash = hash;
-        let mut prefix = &LEAF_PREFIX;
         for hash in proof {
             let (left, right) = match hash.as_ref() < running_hash.as_ref() {
                 true => (*hash, running_hash),
                 false => (running_hash, *hash),
             };
-            running_hash = H::hash(&concat_hashes(left, right, prefix));
-            prefix = &INTERNAL_PREFIX;
+            running_hash = H::hash(&concat_hashes(left, right));
         }
         Some(running_hash) == tree_root
     }
@@ -277,7 +271,6 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
     fn recalculate_branch(&mut self, leaf_idx: usize) {
         let mut node_idx = leaf_idx;
-        let mut prefix = &LEAF_PREFIX;
         for layer_idx in 0..self.layers.len() - 1 {
             let layer = &self.layers[layer_idx];
             // determine if new leaf is left or right child and find its sibling
@@ -287,9 +280,8 @@ impl<H: MerkleHasher> MerkleTree<H> {
             };
             // rehash parent node
             let parent_idx = node_idx / 2;
-            self.layers[layer_idx + 1][parent_idx] = H::hash(&concat_hashes(left, right, prefix));
+            self.layers[layer_idx + 1][parent_idx] = H::hash(&concat_hashes(left, right));
             node_idx = parent_idx;
-            prefix = &INTERNAL_PREFIX;
         }
     }
 }
@@ -320,7 +312,6 @@ mod tests {
             Some(Sha256::hash(&concat_hashes(
                 Sha256::hash(&"foo"),
                 Sha256::hash(&"bar"),
-                &LEAF_PREFIX,
             )))
         );
     }
@@ -334,7 +325,6 @@ mod tests {
             Some(SipHasher::hash(&concat_hashes(
                 SipHasher::hash(&"foo"),
                 SipHasher::hash(&"bar"),
-                &LEAF_PREFIX,
             )))
         );
     }
