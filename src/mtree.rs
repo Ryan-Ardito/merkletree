@@ -12,10 +12,9 @@ API design decisions:
   - Split Hasher trait into two methods, like write and finish?
 
 Implementation improvements:
+  - Store first_leaf_idx?
   - Root hash and proof should match other implementations for given data?
-  - More efficient storage
-  - Better runtime speed
-  - Threading?
+  - Refactor after implementation change
 
  *****************************************************************************/
 
@@ -154,6 +153,8 @@ impl<H: MerkleHasher> MerkleTree<H> {
     ///       1     1
     ///      / \   / \
     ///     2   2 2   2
+    ///    / \
+    ///   3   3
     /// ```
     ///
     /// Returns None if tree is empty
@@ -165,7 +166,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
     }
 
     fn from_leaves(leaves: Vec<H::Hash>) -> Self {
-        let layers = Self::build_layers(leaves);
+        let layers = Self::build_tree(leaves);
         MerkleTree { tree: layers }
     }
 }
@@ -173,7 +174,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
 /// business logic
 impl<H: MerkleHasher> MerkleTree<H> {
     /// Generate a merkle tree from a vec of leaf hashes
-    fn build_layers(leaves: Vec<H::Hash>) -> Vec<H::Hash> {
+    fn build_tree(leaves: Vec<H::Hash>) -> Vec<H::Hash> {
         if leaves.is_empty() {
             return leaves;
         }

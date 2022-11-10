@@ -27,8 +27,36 @@ assert!(tree.verify(&proof, &"baz", root,));
 let tree = MerkleTree::<MyHasher>::with_hasher();
 ```
 
+# Data model
+
+Merkletree is stored as a 1-dimensional array in breadth order.
+
+```text
+             R
+           /   \
+         /       \
+       i1         i2
+     /    \      /   \
+    i3     1    2     3
+   / \
+  4   5
+
+tree = [R, i1, i2, i3, 1, 2, 3, 4, 5]
+
+tree.insert(6)
+
+             R
+           /   \
+         /       \
+       i1         i2
+     /    \      /   \
+    i3    i4    2     3
+   / \    / \
+  4   5  1   6
+
+tree = [R, i1, i2, i3, i4, 2, 3, 4, 5, 1, 6]
+```
+
 TODO:
 1. Out-of-the-box proofs should be verifiable with openzeppelin/MerkleProof.sol
-1. Currently, the final leaf hash is repeated until the leaves layer is a power of 2.
-This uses more memory than needed, and may present an attack surface. Change before release.
 1. Stabilize API.
