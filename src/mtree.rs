@@ -12,14 +12,13 @@ API design decisions:
   - Split Hasher trait into two methods, like write and finish?
 
 Implementation improvements:
+  - Provable by openzeppelin/MerkleProof.sol
+  - Serialization
   - Store first_leaf_idx?
-  - Root hash and proof should match other implementations for given data?
-  - Refactor after implementation change
 
  *****************************************************************************/
 
-/// Concatenate hashes prepended with a prefix. Leaf nodes and internal nodes are
-/// prepended with a different prefix. This is done to prevent second pre-image attacks.
+/// Concatenate hashes in numerical order
 /// TODO: Make into a macro?
 fn concat_hashes<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
     let (left, right) = (left.as_ref(), right.as_ref());
@@ -51,7 +50,7 @@ pub struct MerkleTree<H: MerkleHasher = Sha256> {
     tree: Vec<H::Hash>,
 }
 
-/// MerkleProof is a vector of hashes. No other data is needed,
+/// MerkleProof is a vector of hashes. No position data is needed,
 /// as hashes are always concatenated in ascending order.
 type MerkleProof<H: MerkleHasher> = Vec<H::Hash>;
 
@@ -141,12 +140,17 @@ impl<H: MerkleHasher> MerkleTree<H> {
 
 /// Hash API
 impl<H: MerkleHasher> MerkleTree<H> {
+    fn from_leaves(leaves: Vec<H::Hash>) -> Self {
+        let layers = Self::build_tree(leaves);
+        MerkleTree { tree: layers }
+    }
+
     /// return the root hash
     pub fn root(&self) -> Option<H::Hash> {
         self.tree.first().copied()
     }
 
-    /// Depth is the distance of the furthest node from the root
+    /// Depth is the distance of the furthest node from the root.
     /// ```text
     ///          0
     ///        /   \
@@ -157,7 +161,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
     ///   3   3
     /// ```
     ///
-    /// Returns None if tree is empty
+    /// Returns None if tree is empty.
     pub fn depth(&self) -> Option<usize> {
         match self.tree.len() {
             0 => None,
@@ -165,56 +169,23 @@ impl<H: MerkleHasher> MerkleTree<H> {
         }
     }
 
-    fn from_leaves(leaves: Vec<H::Hash>) -> Self {
-        let layers = Self::build_tree(leaves);
-        MerkleTree { tree: layers }
-    }
-}
-
-/// business logic
-impl<H: MerkleHasher> MerkleTree<H> {
-    /// Build parent hashes from a sequence of hashes
-    fn build_parent_layer(hashes: &[H::Hash]) -> Vec<H::Hash> {
-        let mut layer: Vec<H::Hash> = Vec::new();
-        // iterate over hashes in pairs to generate parent hash
-        for i in (0..hashes.len()).step_by(2) {
-            let left = hashes[i];
-            let right = hashes[i + 1];
-            let parent = H::hash(&concat_hashes(left, right));
-            layer.push(parent);
+    fn insert_hash(&mut self, hash: H::Hash) {
+        if self.tree.is_empty() {
+            self.tree.push(hash);
+            return;
         }
-        layer
-    }
-    /// Generate a merkle tree from a vec of leaf hashes
-    fn build_tree(leaves: Vec<H::Hash>) -> Vec<H::Hash> {
-        if leaves.is_empty() {
-            return leaves;
-        }
-        let mut tree = Vec::new();
-        // if leaves.len() is not a power of 2, prepend ex_leaves' parent hashes to first perfect layer
-        if leaves.len() & (leaves.len() - 1) != 0 {
-            let num_ex_leaves = log2_floor(leaves.len() as f64) as usize * 2;
-            let ex_leaves = &leaves[(leaves.len() - num_ex_leaves)..leaves.len()];
-            // build internal component of first perfect layer
-            let mut layer = Self::build_parent_layer(ex_leaves);
-            // append leaves to first perfect layer
-            layer.extend(&leaves[..(leaves.len() - num_ex_leaves)]);
-            // push extra leaves to tree
-            tree.push(ex_leaves.into());
-            // push first perfect layer to tree
-            tree.push(layer);
-        } else {
-            // if leaves.len() is a power of 2, tree is perfect and no pre hashing is needed
-            tree.push(leaves);
-        }
-
-        // build layers up to root
-        while tree.last().unwrap().len() > 1 {
-            let children = tree.last().unwrap();
-            let parents = Self::build_parent_layer(children);
-            tree.push(parents);
-        }
-        tree.iter().rev().flatten().copied().collect()
+        let size = self.tree.len();
+        // determine the number of leaves in an imperfect layer. 0 if tree is perfect
+        let num_ex_leaves = size - (std::cmp::max(1, 2usize.pow(log2_floor(size as f64))) - 1);
+        // determine the index of the first leaf (node with no children) in the tree
+        let first_leaf_idx =
+            (2usize.pow(log2_floor((size - num_ex_leaves) as f64)) - 1 + num_ex_leaves) / 2;
+        // copy the first leaf to its left child
+        self.tree.push(self.tree[first_leaf_idx]);
+        // make the new hash the first leaf's right child
+        self.tree.push(hash);
+        // recalculate the new node and its ancestors
+        self.recalculate_branch(self.tree.len() - 1);
     }
 
     fn proof(&self, hash: H::Hash) -> Result<MerkleProof<H>, &str> {
@@ -257,19 +228,57 @@ impl<H: MerkleHasher> MerkleTree<H> {
         }
         Some(running_hash) == tree_root
     }
+}
 
-    fn insert_hash(&mut self, hash: H::Hash) {
-        if self.tree.is_empty() {
-            self.tree.push(hash);
-            return;
+/// business logic
+impl<H: MerkleHasher> MerkleTree<H> {
+    /// Build parent layer from a complete layer (hashes.len() is even)
+    fn build_parent_layer(hashes: &[H::Hash]) -> Vec<H::Hash> {
+        debug_assert_eq!(hashes.len() % 2, 0);
+        let mut layer: Vec<H::Hash> = Vec::new();
+        // iterate over hashes in pairs
+        for i in (1..hashes.len()).step_by(2) {
+            let left = hashes[i - 1];
+            let right = hashes[i];
+            let parent = H::hash(&concat_hashes(left, right));
+            layer.push(parent);
         }
-        let size = self.tree.len();
-        let num_ex_leaves = size - (std::cmp::max(1, 2usize.pow(log2_floor(size as f64))) - 1);
-        let first_leaf_idx =
-            (2usize.pow(log2_floor((size - num_ex_leaves) as f64)) - 1 + num_ex_leaves) >> 1;
-        self.tree.push(self.tree[first_leaf_idx]);
-        self.tree.push(hash);
-        self.recalculate_branch(self.tree.len() - 1);
+        layer
+    }
+
+    /// Generate a merkle tree from a vec of leaf hashes
+    fn build_tree(leaves: Vec<H::Hash>) -> Vec<H::Hash> {
+        if leaves.is_empty() {
+            return leaves;
+        }
+        let mut layers = Vec::new();
+        // if leaves.len() is not a power of 2, prepend ex_leaves' parent hashes to first perfect layer
+        if leaves.len() & (leaves.len() - 1) != 0 {
+            // determine the number of leaves that must be placed in an imperfect tree layer
+            let num_ex_leaves = log2_floor(leaves.len() as f64) as usize * 2;
+            // take a slice of extra leaves
+            let ex_leaves = &leaves[(leaves.len() - num_ex_leaves)..leaves.len()];
+            // build internal component of first perfect layer
+            let mut layer = Self::build_parent_layer(ex_leaves);
+            // append leaves to first perfect layer
+            layer.extend(&leaves[..(leaves.len() - num_ex_leaves)]);
+            // push extra leaves layer to layers
+            layers.push(ex_leaves.into());
+            // push first perfect layer to layers
+            layers.push(layer);
+        } else {
+            // if leaves.len() is a power of 2, tree is perfect and no pre hashing is needed
+            layers.push(leaves);
+        }
+
+        // build layers up to root
+        while layers.last().unwrap().len() > 1 {
+            let children = layers.last().unwrap();
+            let parents = Self::build_parent_layer(children);
+            layers.push(parents);
+        }
+        // layers are inserted bottom-up, so tree Vec must be built in reverse
+        layers.iter().rev().flatten().copied().collect()
     }
 
     fn recalculate_branch(&mut self, leaf_idx: usize) {
