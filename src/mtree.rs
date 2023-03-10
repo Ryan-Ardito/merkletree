@@ -28,6 +28,8 @@ fn concat_hashes<T: AsRef<[u8]>>(left: T, right: T) -> Vec<u8> {
     }
 }
 
+/// Calcuate the logarithm base 2 of an f64,
+/// rounded down to the nearest integer u32.
 fn log2_floor(num: f64) -> u32 {
     num.log2().floor() as u32
 }
@@ -150,6 +152,17 @@ impl<H: MerkleHasher> MerkleTree<H> {
         self.tree.first().copied()
     }
 
+    /// Return a slice containing the leaf hashes
+    pub fn leaves(&self) -> &[H::Hash] {
+        if self.tree.is_empty() {
+            return &[];
+        }
+        let size = self.tree.len();
+        // determine the index of the first leaf (node with no children) in the tree
+        let first_leaf_idx = size / 2;
+        &self.tree[first_leaf_idx..]
+    }
+
     /// Depth is the distance of the furthest node from the root.
     /// ```text
     ///          0
@@ -175,11 +188,8 @@ impl<H: MerkleHasher> MerkleTree<H> {
             return;
         }
         let size = self.tree.len();
-        // determine the number of leaves in an imperfect layer. 0 if tree is perfect
-        let num_ex_leaves = size - (std::cmp::max(1, 2usize.pow(log2_floor(size as f64))) - 1);
         // determine the index of the first leaf (node with no children) in the tree
-        let first_leaf_idx =
-            (2usize.pow(log2_floor((size - num_ex_leaves) as f64)) - 1 + num_ex_leaves) / 2;
+        let first_leaf_idx = size / 2;
         // copy the first leaf to its left child
         self.tree.push(self.tree[first_leaf_idx]);
         // make the new hash the first leaf's right child
@@ -252,11 +262,11 @@ impl<H: MerkleHasher> MerkleTree<H> {
             return leaves;
         }
         let mut layers = Vec::new();
-        // if leaves.len() is not a power of 2, prepend ex_leaves' parent hashes to first perfect layer
+        // if leaves.len() is not a power of 2, prepend extra leaves' parents to first perfect layer
         if leaves.len() & (leaves.len() - 1) != 0 {
-            // determine the number of leaves that must be placed in an imperfect tree layer
+            // determine the number of leaves that must be placed in an imperfect layer
             let num_ex_leaves = log2_floor(leaves.len() as f64) as usize * 2;
-            // take a slice of extra leaves
+            // take a slice of the extra leaves
             let ex_leaves = &leaves[(leaves.len() - num_ex_leaves)..leaves.len()];
             // build internal component of first perfect layer
             let mut layer = Self::build_parent_layer(ex_leaves);
@@ -267,7 +277,7 @@ impl<H: MerkleHasher> MerkleTree<H> {
             // push first perfect layer to layers
             layers.push(layer);
         } else {
-            // if leaves.len() is a power of 2, tree is perfect and no pre hashing is needed
+            // if leaves.len() is a power of 2, tree is perfect and no preparation is needed
             layers.push(leaves);
         }
 
@@ -281,19 +291,18 @@ impl<H: MerkleHasher> MerkleTree<H> {
         layers.iter().rev().flatten().copied().collect()
     }
 
-    fn recalculate_branch(&mut self, leaf_idx: usize) {
-        let mut node_idx = leaf_idx;
-        // follow branch until the root is reached
-        while node_idx > 0 {
+    fn recalculate_branch(&mut self, mut leaf_idx: usize) {
+        // follow branch up and rehash to the root
+        while leaf_idx > 0 {
             // determine if new leaf is left or right child and find its sibling
-            let (left, right) = match node_idx % 2 == 0 {
-                false => (self.tree[node_idx], self.tree[node_idx + 1]),
-                true => (self.tree[node_idx - 1], self.tree[node_idx]),
+            let (left, right) = match leaf_idx % 2 == 0 {
+                false => (self.tree[leaf_idx], self.tree[leaf_idx + 1]),
+                true => (self.tree[leaf_idx - 1], self.tree[leaf_idx]),
             };
             // rehash parent node
-            let parent_idx = (node_idx - 1) / 2;
+            let parent_idx = (leaf_idx - 1) / 2;
             self.tree[parent_idx] = H::hash(&concat_hashes(left, right));
-            node_idx = parent_idx;
+            leaf_idx = parent_idx;
         }
     }
 }
@@ -326,6 +335,21 @@ mod tests {
                 Sha256::hash(&"bar"),
             )))
         );
+    }
+
+    #[test]
+    fn test_leaves_iter() {
+        let elements = vec!["foo", "bar"];
+        let elem_hashes: Vec<<Sha256 as MerkleHasher>::Hash> = elements.clone().iter().map(Sha256::hash).collect();
+        let tree = MerkleTree::from_array(&elements);
+        assert_eq!(tree.leaves(), &elem_hashes)
+        // assert_eq!(
+        //     tree.root(),
+        //     Some(Sha256::hash(&concat_hashes(
+        //         Sha256::hash(&"foo"),
+        //         Sha256::hash(&"bar"),
+        //     )))
+        // );
     }
 
     #[test]

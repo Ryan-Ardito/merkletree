@@ -1,7 +1,7 @@
 # Merkle Tree
 
-This Merkle Tree implementation aims to be an easy to use out-of-the-box tool for generating merkletrees and proofs
-for smart contracts. A common usecase is NFT airdrop whitelists.
+This Merkle Tree implementation aims to be an easy to use out-of-the-box tool for generating
+merkletrees and proofs for smart contracts. A common usecase is NFT airdrop whitelists.
 
 ```rust
 use merkletree::MerkleTree;
@@ -29,7 +29,7 @@ let tree = MerkleTree::<MyHasher>::with_hasher();
 
 # Data model
 
-Merkletree is stored as a 1-dimensional array in breadth order.
+Merkletree is a complete binary tree, stored as a 1-dimensional array in breadth order.
 
 ```text
              R
@@ -42,6 +42,7 @@ Merkletree is stored as a 1-dimensional array in breadth order.
   4   5
 
 tree = [R, i1, i2, i3, 1, 2, 3, 4, 5]
+leaves = [1, 2, 3, 4, 5]
 
 tree.insert(6)
 
@@ -55,6 +56,7 @@ tree.insert(6)
   4   5  1   6
 
 tree = [R, i1, i2, i3, i4, 2, 3, 4, 5, 1, 6]
+leaves = [2, 3, 4, 5, 1, 6]
 ```
 
 TODO:
