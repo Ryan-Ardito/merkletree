@@ -4,8 +4,7 @@
 //! This implementation of Merkle Tree has an API for data, but does not store any
 //! data beyond the hashes.
 //!
-//! Merkletree is a Vector of Vectors where inner Vectors represent layers in the tree.
-//! Each layer contains hashes representing nodes in the tree.
+//! Merkletree is stored as a flat Vector of hashes.
 //!
 //! A parent node's hash is the concatenation of it's children in *ascending order.*
 //! ```text
